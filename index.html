@@ -36,7 +36,6 @@ html, body {
     animation: heartBeat 0.4s linear;
 }
 
-/* 💡 cursor: pointer を追加して、触れば閉じることが直感的に伝わるように */
 .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background-color:rgba(0,0,0,0.8);z-index:200;justify-content:center;align-items:center;flex-direction:column;color:white;cursor:pointer;}
 .modal img{max-width:80%;max-height:70%;border:5px solid white;border-radius:10px;object-fit:contain;}
 .modal h2{margin-top:15px;font-size:24px;}
@@ -143,23 +142,18 @@ function toggleAdminMode() {
     if (isAdmin) {
         document.body.classList.remove('children-mode');
         document.body.classList.add('admin-mode');
-        alert("⚙️ 先生モードを起動しました：マップをタップしてピンを追加できます。");
     } else {
         document.body.classList.remove('admin-mode');
         document.body.classList.add('children-mode');
         closeEditPopup();
-        alert("🎒 子どもモード（探検モード）に戻りました。");
     }
     stagePins();
 }
 
 function resetChildrenData() {
-    if (confirm("🧹 子どもたちが集めたスタンプの記録（黄色マーク）をすべて消去して、灰色に戻しますか？")) {
-        localStorage.removeItem(STORAGE_KEY_STAMPS);
-        myStamps = [];
-        stagePins();
-        alert("スタンプの記録をリセットしました！");
-    }
+    localStorage.removeItem(STORAGE_KEY_STAMPS);
+    myStamps = [];
+    stagePins();
 }
 
 function stagePins() {
@@ -196,7 +190,6 @@ function stagePins() {
     });
 }
 
-// 💡 修正：自動で閉じる処理（setTimeout）を完全に削除
 function showRoomDetails(pin) {
     const imgEl = document.getElementById('modal-image');
     imgEl.src = `${pin.id}.jpg`;
@@ -241,7 +234,7 @@ function playNotFoundSound() {
     if (audioCtx.state === 'suspended') audioCtx.resume();
     const now = audioCtx.currentTime;
     const osc = audioCtx.createOscillator();
-    const gain = originGain = audioCtx.createGain();
+    const gain = audioCtx.createGain();
     osc.connect(gain); gain.connect(audioCtx.destination);
     osc.type = 'triangle'; osc.frequency.setValueAtTime(440, now);
     osc.frequency.rampToValueAtTime(330, now + 0.1);
@@ -348,27 +341,25 @@ function openEditPopup(index) {
 
 function closeEditPopup() { document.getElementById('admin-edit-popup').style.display = 'none'; selectedPinIndex = null; }
 
+// 💡 修正：confirm（本当に消しますか？）も alert（削除しました）もすべて廃止し、即座に消去
 function deletePin() {
     if (selectedPinIndex === null) return;
-    if (confirm("このピンを削除してもよろしいですか？")) {
-        pinPositions.splice(selectedPinIndex, 1);
-        stagePins();
-        alert("ピンを削除しました。");
-    }
+    pinPositions.splice(selectedPinIndex, 1);
+    stagePins();
     closeEditPopup();
 }
 
 function generateAdminQR() {
-    if (pinPositions.length === 0) { alert("ピンがありません"); return; }
+    if (pinPositions.length === 0) { return; }
     try {
         const qrCanvas = document.getElementById('qrcode-canvas');
         qrCanvas.innerHTML = ""; 
         const qrData = "SET:" + JSON.stringify(pinPositions);
         const qr = qrcode(0, 'L');
-        qr.addData(qrData); qr.make();
+        qrData_str = qr.addData(qrData); qr.make();
         qrCanvas.innerHTML = qr.createImgTag(5);
         document.getElementById('qrcode-popup').style.display = 'block';
-    } catch (e) { alert("QRコードの生成に失敗しました。"); }
+    } catch (e) { console.error(e); }
 }
 
 function closeQRPopup() { document.getElementById('qrcode-popup').style.display = 'none'; }
