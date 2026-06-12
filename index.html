@@ -35,8 +35,7 @@
 <body class="children-mode">
 
     <main id="map-area">
-        <img src="https://drive.google.com/uc?export=view&id=1StstbVYlIjVJ0V95H-9yD4Gb6fQf_woW
-" alt="校内マップ" id="map-image">
+        <img src="https://drive.google.com/uc?export=view&id=1StstbVYlIjVJ0V95H-9yD4Gb6fQf_woW" alt="校内マップ" id="map-image">
         <div id="stamps-container"></div>
     </main>
 
@@ -56,32 +55,29 @@
 
     <script>
         // ==========================================
-        // 🛠️ 先生のデータ設定エリア（ここを書き換えます）
+        // 🛠️ 先生のデータ設定エリア
         // ==========================================
         
-        // 【1】さっき先生がポチポチしてコピーした「位置データ」をここに貼り付けます！
-        // （※現在はテスト用に1001と1002が仮で入っています。[]の中身を書き換えてください）
+        // 【1】位置データ（仮の位置。先生モードでポチポチした後にここを書き換えます）
         const pinPositions = [
             { "id": "1001", "x": 30, "y": 40 },
             { "id": "1002", "x": 70, "y": 20 }
         ];
 
-        // 【2】それぞれの教室の名前と、Googleドライブの写真URLをここに書きます！
+        // 【2】教室の名前と、いただいた理科室のURLを配置しました
         const roomDetails = {
             "1001": {
                 name: "こうちょうしつ",
-                image: "https://drive.google.com/uc?export=view&id=★ここに校長室の写真ID★"
+                image: "https://drive.google.com/uc?export=view&id=1ToGn_ByXQuz7ybHGlfwOQU9meEtk6iin" // テスト用に同じ画像を入れています
             },
             "1002": {
                 name: "りかしつ",
-                image: "https://drive.google.com/uc?export=view&id=https://drive.google.com/uc?export=view&id=1ToGn_ByXQuz7ybHGlfwOQU9meEtk6iin
-"
+                image: "https://drive.google.com/uc?export=view&id=1ToGn_ByXQuz7ybHGlfwOQU9meEtk6iin"
             }
-            // 1003以降を増やす場合は、後ろにコンマ「,」をつけて同じように追加します
         };
 
         // ==========================================
-        // ⚙️ システムのプログラム（基本触らなくてOK）
+        // ⚙️ システムのプログラム
         // ==========================================
         
         // モード判定
@@ -94,16 +90,15 @@
             document.body.classList.add('admin-mode');
         }
 
-        // テスト用：子どもたちが「すでにゲットしたスタンプ」のリスト（LocalStorageの代わり）
-        // ※今はテストとして、1001（校長室）だけゲットした状態にしています
-        let myStamps = ["1001"]; 
+        // テスト用：1002（理科室）をすでにゲットした状態にしています
+        let myStamps = ["1002"]; 
 
-        // 画面にピン（スタンプ）を配置する関数（通常モード用）
+        // 画面にピンを配置する関数
         function stagePins() {
-            if (isAdmin) return; // 先生モードの時は動かさない
+            if (isAdmin) return; 
 
             const container = document.getElementById('stamps-container');
-            container.innerHTML = ""; // 一旦クリア
+            container.innerHTML = ""; 
 
             pinPositions.forEach(pin => {
                 const stamp = document.createElement('div');
@@ -111,17 +106,15 @@
                 stamp.style.left = pin.x + '%';
                 stamp.style.top = pin.y + '%';
 
-                // もしすでにゲットしているスタンプなら、金色にする
                 if (myStamps.includes(pin.id)) {
                     stamp.classList.add('achieved');
-                    
-                    // ゲット済みのスタンプをタップした時の処理
-                    stamp.addEventListener('click', () => {
+                    stamp.addEventListener('click', (e) => {
+                        e.stopPropagation();
                         showRoomDetails(pin.id);
                     });
                 } else {
-                    // まだゲットしていないスタンプをタップした時
-                    stamp.addEventListener('click', () => {
+                    stamp.addEventListener('click', (e) => {
+                        e.stopPropagation();
                         alert("ここは まだ見つけていないよ！QRコードを探そう！");
                     });
                 }
@@ -130,7 +123,7 @@
             });
         }
 
-        // 教室の詳細（ポップアップ）を表示する関数
+        // 教室の詳細を表示する関数
         function showRoomDetails(qrId) {
             const room = roomDetails[qrId];
             if (!room) return;
@@ -149,9 +142,8 @@
         stagePins();
 
         // --- 先生モード用のピン登録・書き出し処理 ---
-        let temporaryPins = [...pinPositions]; // 既存のピンを引き継ぐ
+        let temporaryPins = [...pinPositions]; 
         if (isAdmin) {
-            // 先生モードのときは登録済みのピンを表示
             temporaryPins.forEach(p => createTempPin(p.x, p.y, p.id));
         }
 
@@ -187,7 +179,7 @@
             if (temporaryPins.length === 0) { alert("ピンがありません"); return; }
             const jsonString = JSON.stringify(temporaryPins, null, 2);
             navigator.clipboard.writeText(jsonString).then(() => {
-                alert("【完了】設定コードをコピーしました！\n\nコード内の「const pinPositions = ...」の部分にCtrl+Vで貼り付けてください。");
+                alert("【完了】設定コードをコピーしました！\n\nコード内の「const pinPositions = ...」の部分に貼り付けてください。");
             });
         }
     </script>
