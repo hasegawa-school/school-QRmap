@@ -107,9 +107,6 @@ function stagePins() {
 }
 
 function showRoomDetails(qrId) {
-    // 児童がゲットした際に表示する「りかしつ」などの写真
-    // CORSを完全に回避するため、Googleドライブ上の「リンクを知っている全員」に設定した写真URLを動的に生成します
-    // ※本番は先生が用意したそれぞれの写真IDに変更して連動可能です
     document.getElementById('modal-image').src = `https://drive.google.com/uc?export=view&id=1ToGn_ByXQuz7ybHGlfwOQU9meEtk6iin`; 
     document.getElementById('modal-title').innerText = `${qrId} の へや`;
     document.getElementById('room-modal').style.display = 'flex';
@@ -158,11 +155,11 @@ function scanQRCode() {
         if (code) {
             const qrValue = code.data;
             
-            // 【🌟 先生用マスターQRを読み取った場合の処理】
+            // 【先生用マスターQRを読み取った場合の処理】
             if (qrValue.startsWith("SET:")) {
                 const dataStr = qrValue.replace("SET:", "");
                 pinPositions = JSON.parse(dataStr);
-                localStorage.setItem(STORAGE_KEY_PINS, JSON.stringify(pinPositions)); // 児童端末にマップ構成を保存
+                localStorage.setItem(STORAGE_KEY_PINS, JSON.stringify(pinPositions)); 
                 alert("⚙️ マップのセットアップが完了しました！探検をはじめよう！");
                 stopCamera();
                 stagePins();
@@ -225,7 +222,7 @@ function createTempPin(x, y, label) {
     container.appendChild(pin);
 }
 
-// 先生の打ったピンデータを凝縮して巨大なQRコードを作る
+// 先生の打ったピンデータからQRコードを生成する
 function generateAdminQR() {
     if (pinPositions.length === 0) { alert("ピンがありません"); return; }
     document.getElementById('qrcode-canvas').innerHTML = ""; 
@@ -243,7 +240,7 @@ function closeQRPopup() {
     document.getElementById('qrcode-popup').style.display = 'none';
 }
 
-// 起動時にピン配置を表示
+// 初回表示
 stagePins();
 </script>
 </body>
