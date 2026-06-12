@@ -8,7 +8,6 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 <style>
-/* 🌍 画面全体の共通設定 */
 html, body {
     margin: 0;
     padding: 0;
@@ -22,7 +21,6 @@ html, body {
     position: relative;
 }
 
-/* 🗺️ マップを基準にするための外枠（ズレ防止の要） */
 #map-wrapper {
     position: relative;
     display: flex;
@@ -44,10 +42,19 @@ html, body {
     width: auto;
     height: auto;
     object-fit: contain;
-    pointer-events: auto; /* タップイベントを正確に取得 */
+    cursor: pointer;
 }
 
-/* 📍 ピンのスタイル */
+/* 📍 ピンの土台：マップのタップを邪魔しないよう配置 */
+#stamps-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* これにより下の画像へのタップが貫通します */
+}
+
 .stamp {
     position: absolute;
     width: 32px;
@@ -57,11 +64,11 @@ html, body {
     cursor: pointer;
     box-shadow: 0 3px 6px rgba(0,0,0,0.3);
     transition: transform 0.1s;
+    pointer-events: auto; /* ピン自体はしっかりタップできるようにする */
     z-index: 10;
 }
 .stamp:active { transform: translate(-50%, -50%) scale(0.9); }
 
-/* ポップアップ等のUI */
 .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background-color:rgba(0,0,0,0.8);z-index:200;justify-content:center;align-items:center;flex-direction:column;color:white;}
 .modal img{max-width:80%;max-height:70%;border:5px solid white;border-radius:10px;object-fit:contain;}
 .modal h2{margin-top:15px;font-size:24px;}
@@ -287,29 +294,29 @@ function tick() {
 }
 
 function handleScanResult(qrValue) {
+    // 💡 修正：マスターQR読み込み後は、文字を出さずに「すぐにマップを表示」
     if (qrValue.startsWith("SET:")) {
         playBeep();
         const dataStr = qrValue.replace("SET:", "");
         pinPositions = JSON.parse(dataStr);
         localStorage.setItem(STORAGE_KEY_PINS, JSON.stringify(pinPositions)); 
-        alert("⚙️ マップのセットアップが完了しました！");
-        stopCamera();
-        stagePins();
+        stopCamera(); // カメラをすぐに閉じる
+        stagePins();  // マップに即反映
         return;
     }
     
     const hitPin = pinPositions.find(p => String(p.id) === String(qrValue));
     if (hitPin) {
+        playBeep();
         if (!myStamps.includes(String(qrValue))) {
-            playBeep();
             myStamps.push(String(qrValue));
             localStorage.setItem(STORAGE_KEY_STAMPS, JSON.stringify(myStamps));
-            alert(`🎉新しいスタンプをみつけたよ！`);
-        } else {
-            alert(`もう持っているスタンプだよ！`);
         }
-        stopCamera();
-        stagePins();
+        stopCamera(); // カメラをすぐに閉じる
+        stagePins();  // マップを更新
+        
+        // 💡 修正：教室QR読み込み後、すぐにピンを押したときの画面（教室の画像）を表示
+        showRoomDetails(hitPin);
     }
 }
 
@@ -326,22 +333,17 @@ function toggleAdminMode() {
     stagePins();
 }
 
-// 💡 修正：画像（map.png）そのものを基準にした正確な座標計算に変更
+// 💡 修正：マップ画像のタップ判定を100%確実に拾える構造へ修正
 document.getElementById('map-image').addEventListener('click', function(e) {
     if (!isAdmin) return;
     
-    // タップされた画像（map-image）の正確なサイズと位置を取得
     const rect = this.getBoundingClientRect();
-    
-    // 画像の左上からのクリック位置を計算
     const clickX = e.clientX - rect.left;
     const clickY = e.clientY - rect.top;
     
-    // 画像の「実際の表示幅・高さ」に対するパーセンテージを計算
     const percentX = (clickX / rect.width) * 100;
     const percentY = (clickY / rect.height) * 100;
     
-    // 空き番号の割り振りと追加
     let targetId = 101;
     const currentIds = pinPositions.map(p => parseInt(p.id));
     while (currentIds.includes(targetId)) {
@@ -355,7 +357,7 @@ document.getElementById('map-image').addEventListener('click', function(e) {
     });
     pinPositions.sort((a, b) => parseInt(a.id) - parseInt(b.id));
     
-    // 即座にピン画面に連動して反映
+    // 即時反映
     stagePins();
 });
 
@@ -400,7 +402,6 @@ function generateAdminQR() {
 
 function closeQRPopup() { document.getElementById('qrcode-popup').style.display = 'none'; }
 
-// 💡 画面サイズが変わったとき（画面の回転など）にもピンがズレないように追従させる処理
 window.addEventListener('resize', stagePins);
 
 stagePins();
