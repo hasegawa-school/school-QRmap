@@ -19,6 +19,8 @@ html, body {
     align-items: center;
     overflow: hidden;
     position: relative;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 #map-wrapper {
@@ -73,9 +75,30 @@ html, body {
 .modal h2{margin-top:15px;font-size:24px;}
 .close-btn{margin-top:15px;padding:10px 20px;background-color:#ff6666;color:white;border:none;border-radius:50px;font-size:18px;cursor:pointer;}
 
-#camera-container{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:300;flex-direction:column;justify-content:center;align-items:center;}
-#webcam-video{width:100%;height:80%;object-fit:cover;}
-#camera-close-btn{position:fixed;bottom:30px;padding:15px 30px;background:#ff6666;color:white;border:none;border-radius:50px;font-size:20px;font-weight:bold;cursor:pointer;z-index:310;}
+/* 📸 修正：カメラプレビューを画面中央の「小さなポップアップ小窓」に変更 */
+#camera-container {
+    display: none;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 280px;
+    height: 280px;
+    background: #000;
+    border: 4px solid #3498db;
+    border-radius: 20px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    z-index: 300;
+    overflow: hidden;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+#webcam-video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
 
 #qrcode-popup{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:25px;border-radius:15px;box-shadow:0 0 30px rgba(0,0,0,0.5);z-index:400;text-align:center;color:black;width:85%;max-width:320px;}
 #qrcode-canvas img { max-width: 100%; height: auto; margin: 15px auto; display: block; }
@@ -115,7 +138,13 @@ html, body {
     </div>
 </div>
 
-<button id="camera-button" onclick="startCamera()">カ<br>メ<br>ラ</button>
+<button id="camera-button" 
+        style="user-select: none; -webkit-user-select: none;"
+        onmousedown="startCamera()" 
+        onmouseup="stopCamera()" 
+        onmouseleave="stopCamera()"
+        ontouchstart="startCamera(event)" 
+        ontouchend="stopCamera(event)">カ<br>メ<br>ラ</button>
 
 <div id="admin-panel">
 <h3>【先生用】設定モード</h3>
@@ -144,6 +173,11 @@ html, body {
 <button class="close-btn">とじる</button>
 </div>
 
+<div id="camera-container">
+    <video id="webcam-video" autoplay playsinline></video>
+    <canvas id="qr-canvas" hidden></canvas>
+</div>
+
 <script>
 let isAdmin = false;
 let pinPositions = [];
@@ -160,37 +194,32 @@ if (localStorage.getItem(STORAGE_KEY_STAMPS)) {
     myStamps = JSON.parse(localStorage.getItem(STORAGE_KEY_STAMPS));
 }
 
-// 💡 隠しコマンド（キー連打）を判定するための変数
 let tKeyCount = 0;
 let rKeyCount = 0;
 let lastKeyTime = 0;
 
-// 💡 キーボード入力を監視するイベントリスナー
 window.addEventListener('keydown', function(e) {
     const now = Date.now();
-    // 前の入力から1秒以上経っていたらリセット
     if (now - lastKeyTime > 1000) {
         tKeyCount = 0;
         rKeyCount = 0;
     }
     lastKeyTime = now;
 
-    // 「t」キーが押されたとき
     if (e.key === 't' || e.key === 'T') {
         tKeyCount++;
-        rKeyCount = 0; // 他のキーのカウントはクリア
+        rKeyCount = 0;
         if (tKeyCount === 3) {
             tKeyCount = 0;
             toggleAdminMode();
         }
     }
-    // 「r」キーが押されたとき
     else if (e.key === 'r' || e.key === 'R') {
         rKeyCount++;
-        tKeyCount = 0; // 他のキーのカウントはクリア
+        tKeyCount = 0;
         if (rKeyCount === 3) {
             rKeyCount = 0;
-            resetAllData();
+            resetChildrenData(); // 💡 修正：スタンプデータのみのリセット関数を呼ぶ
         }
     } else {
         tKeyCount = 0;
@@ -213,15 +242,13 @@ function toggleAdminMode() {
     stagePins();
 }
 
-// 💡 修正：データを完全に初期化するリセット機能
-function resetAllData() {
-    if (confirm("🚨 これまでのスタンプ記録と、マップに配置したピンの設定をすべて消去して最初の状態に戻しますか？")) {
-        localStorage.removeItem(STORAGE_KEY_PINS);
+// 💡 修正：ピン設定は残し、子どもが読み込んだスタンプ（黄色マーク）だけを灰色に戻すリセット
+function resetChildrenData() {
+    if (confirm("🧹 子どもたちが集めたスタンプの記録（黄色マーク）をすべて消去して、灰色に戻しますか？（先生のピン設定は残ります）")) {
         localStorage.removeItem(STORAGE_KEY_STAMPS);
-        pinPositions = [];
         myStamps = [];
-        stagePins();
-        alert("データをすべてリセットしました。");
+        stagePins(); // 画面のピンの色を灰色にリフレッシュ
+        alert("スタンプの記録をリセットしました！");
     }
 }
 
@@ -282,7 +309,7 @@ function closeModal() {
     document.getElementById('room-modal').style.display = 'none';
 }
 
-// === 📸 QR読取ロジック ===
+// === 📸 QR読取ロジック（ボタンを押している間だけ起動する仕様へ修正） ===
 let videoStream = null;
 let isScanning = false;
 let lastCode = "";
@@ -299,9 +326,14 @@ function playBeep() {
     osc.start(); osc.stop(audioCtx.currentTime + 0.1);
 }
 
-function startCamera() {
+function startCamera(e) {
+    if (e) e.preventDefault(); // スマホの誤作動（ズームやスクロール）を防止
+    if (isScanning) return; // すでに起動中なら何もしない
+
     const video = document.getElementById('webcam-video');
     document.getElementById('camera-container').style.display = 'flex';
+    
+    // カメラの起動処理を確実に実行
     navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
     .then(stream => {
         videoStream = stream;
@@ -310,12 +342,15 @@ function startCamera() {
         requestAnimationFrame(tick);
     })
     .catch(err => {
-        alert("カメラが起動できませんでした。");
+        console.error("カメラエラー:", err);
         stopCamera();
     });
 }
 
-function stopCamera() {
+function stopCamera(e) {
+    if (e) e.preventDefault();
+    if (!isScanning) return;
+
     isScanning = false;
     document.getElementById('camera-container').style.display = 'none';
     if (videoStream) {
@@ -355,7 +390,7 @@ function handleScanResult(qrValue) {
         const dataStr = qrValue.replace("SET:", "");
         pinPositions = JSON.parse(dataStr);
         localStorage.setItem(STORAGE_KEY_PINS, JSON.stringify(pinPositions)); 
-        stopCamera();
+        stopCamera(); // 読み取れたらカメラを閉じる
         stagePins();
         return;
     }
@@ -367,7 +402,7 @@ function handleScanResult(qrValue) {
             myStamps.push(String(qrValue));
             localStorage.setItem(STORAGE_KEY_STAMPS, JSON.stringify(myStamps));
         }
-        stopCamera();
+        stopCamera(); // 💡 読み取れたら自動的にカメラを閉じる
         stagePins();
         showRoomDetails(hitPin);
     }
