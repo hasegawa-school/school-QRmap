@@ -1,43 +1,89 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>QR校内探検マップ</title>
+<link rel="stylesheet" href="style.css">
+<style>
+.modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background-color:rgba(0,0,0,0.8);z-index:200;justify-content:center;align-items:center;flex-direction:column;color:white;}
+.modal img{max-width:80%;max-height:70%;border:5px solid white;border-radius:10px;object-fit:contain;}
+.modal h2{margin-top:15px;font-size:24px;}
+.close-btn{margin-top:15px;padding:10px 20px;background-color:#ff6666;color:white;border:none;border-radius:50px;font-size:18px;cursor:pointer;}
+#admin-toggle{position:fixed;left:10px;bottom:10px;background:rgba(0,0,0,0.5);color:white;border:none;padding:5px 10px;border-radius:5px;font-size:12px;z-index:150;cursor:pointer;}
+</style>
+</head>
+<body class="children-mode">
+
+<main id="map-area">
+<img id="map-image" src="" alt="校内マップ">
+<div id="stamps-container"></div>
+</main>
+
+<button id="camera-button">カ<br>メ<br>ラ</button>
+<button id="admin-toggle" onclick="toggleAdminMode()">⚙️ 先生モード</button>
+
+<div id="admin-panel">
+<h3>【先生用】設定モード</h3>
+<p>①マップをタップしてピンを配置 ➡️ ②下のボタンで保存</p>
+<button id="save-settings-btn" onclick="downloadConfig()">💾 設定ファイルを保存(ダウンロード)</button>
+</div>
+
+<div id="room-modal" class="modal" onclick="closeModal()">
+<img id="modal-image" src="" alt="教室の様子">
+<h2 id="modal-title">教室名</h2>
+<button class="close-btn">とじる</button>
+</div>
+
 <script>
-const urlParams=new URLSearchParams(window.location.search);
-const mode=urlParams.get('mode');
-const isAdmin=(mode==='admin');
-if(isAdmin){
-document.body.classList.remove('children-mode');
-document.body.classList.add('admin-mode');
+// ==========================================
+// ⚙️ 共有フォルダの設定（ここだけ書き換えてください）
+// ==========================================
+const DRIVE_FOLDER_ID = '1ncpWgyyecrYsqk28Ekvwp9Ni4MEwPPlN';
+
+// 基本となるURL
+const MAP_URL = `https://drive.google.com/uc?export=view&id=${DRIVE_FOLDER_ID}&file=map.png`;
+const CONFIG_URL = `https://drive.google.com/uc?export=view&id=${DRIVE_FOLDER_ID}&file=config.json`;
+
+document.getElementById('map-image').src = MAP_URL;
+
+let isAdmin = false;
+let pinPositions = [];
+let myStamps = []; // 本番はここにカメラで読み取ったQRのIDが入ります
+
+// Googleドライブから先生が作った設定ファイル(config.json)を読み込む
+async function loadConfig() {
+try {
+const response = await fetch(CONFIG_URL);
+if (response.ok) {
+pinPositions = await response.json();
 }
-const pinPositions=[
-{"id":"1001","x":30,"y":40},
-{"id":"1002","x":70,"y":20}
-];
-const roomDetails={
-"1001":{
-name:"こうちょうしつ",
-image:"https://drive.google.com/uc?export=view&id=1ToGn_ByXQuz7ybHGlfwOQU9meEtk6iin"
-},
-"1002":{
-name:"りかしつ",
-image:"https://drive.google.com/uc?export=view&id=1ToGn_ByXQuz7ybHGlfwOQU9meEtk6iin"
+} catch (error) {
+console.log("設定ファイルがまだないか、読み込めませんでした。初期状態で起動します。");
 }
-};
-let myStamps=["1002"];
-function stagePins(){
-if(isAdmin)return;
-const container=document.getElementById('stamps-container');
-container.innerHTML="";
-pinPositions.forEach(pin=>{
-const stamp=document.createElement('div');
-stamp.className='stamp';
-stamp.style.left=pin.x+'%';
-stamp.style.top=pin.y+'%';
-if(myStamps.includes(pin.id)){
+stagePins();
+}
+
+function stagePins() {
+const container = document.getElementById('stamps-container');
+container.innerHTML = "";
+if (isAdmin) {
+pinPositions.forEach(p => createTempPin(p.x, p.y, p.id));
+return;
+}
+pinPositions.forEach(pin => {
+const stamp = document.createElement('div');
+stamp.className = 'stamp';
+stamp.style.left = pin.x + '%';
+stamp.style.top = pin.y + '%';
+if (myStamps.includes(pin.id)) {
 stamp.classList.add('achieved');
-stamp.addEventListener('click',(e)=>{
+stamp.addEventListener('click', (e) => {
 e.stopPropagation();
 showRoomDetails(pin.id);
 });
-}else{
-stamp.addEventListener('click',(e)=>{
+} else {
+stamp.addEventListener('click', (e) => {
 e.stopPropagation();
 alert("ここは まだ見つけていないよ！QRコードを探そう！");
 });
@@ -45,51 +91,72 @@ alert("ここは まだ見つけていないよ！QRコードを探そう！");
 container.appendChild(stamp);
 });
 }
-function showRoomDetails(qrId){
-const room=roomDetails[qrId];
-if(!room)return;
-document.getElementById('modal-image').src=room.image;
-document.getElementById('modal-title').innerText=room.name;
-document.getElementById('room-modal').style.display='flex';
+
+function showRoomDetails(qrId) {
+// 写真もGoogleドライブのフォルダから自動読み込み（1001.jpgなど）
+const roomImgUrl = `https://drive.google.com/uc?export=view&id=${DRIVE_FOLDER_ID}&file=${qrId}.jpg`;
+document.getElementById('modal-image').src = roomImgUrl;
+document.getElementById('modal-title').innerText = `${qrId} の へや`;
+document.getElementById('room-modal').style.display = 'flex';
 }
-function closeModal(){
-document.getElementById('room-modal').style.display='none';
+
+function closeModal() {
+document.getElementById('room-modal').style.display = 'none';
+}
+
+function toggleAdminMode() {
+isAdmin = !isAdmin;
+if (isAdmin) {
+document.body.classList.remove('children-mode');
+document.body.classList.add('admin-mode');
+alert("先生モードになりました。マップをタップしてピンを配置できます。");
+} else {
+document.body.classList.remove('admin-mode');
+document.body.classList.add('children-mode');
 }
 stagePins();
-let temporaryPins=[...pinPositions];
-if(isAdmin){
-temporaryPins.forEach(p=>createTempPin(p.x,p.y,p.id));
 }
-document.getElementById('map-area').addEventListener('click',function(e){
-if(!isAdmin)return;
-const rect=document.getElementById('map-image').getBoundingClientRect();
-const percentX=((e.clientX-rect.left)/rect.width)*100;
-const percentY=((e.clientY-rect.top)/rect.height)*100;
-if(percentX<0||percentX>100||percentY<0||percentY>100)return;
-const qrId=prompt("この場所のQRコード番号を入力してください");
-if(qrId){
-createTempPin(percentX,percentY,qrId);
-temporaryPins.push({
-id:qrId,
-x:Math.round(percentX * 100)/100,
-y:Math.round(percentY * 100)/100
+
+document.getElementById('map-area').addEventListener('click', function(e) {
+if (!isAdmin) return;
+const rect = document.getElementById('map-image').getBoundingClientRect();
+const percentX = ((e.clientX - rect.left) / rect.width) * 100;
+const percentY = ((e.clientY - rect.top) / rect.height) * 100;
+if (percentX < 0 || percentX > 100 || percentY < 0 || percentY > 100) return;
+const qrId = prompt("この場所のQRコード番号を入力してください（例: 1001）");
+if (qrId) {
+createTempPin(percentX, percentY, qrId);
+pinPositions.push({
+id: qrId,
+x: Math.round(percentX * 100) / 100,
+y: Math.round(percentY * 100) / 100
 });
 }
 });
-function createTempPin(x,y,label){
-const container=document.getElementById('stamps-container');
-const pin=document.createElement('div');
-pin.className='stamp achieved';
-pin.style.left=x+'%';pin.style.top=y+'%';
-pin.innerText=label;pin.style.fontSize='10px';pin.style.color='black';
-pin.style.textAlign='center';pin.style.lineHeight='30px';
+
+function createTempPin(x, y, label) {
+const container = document.getElementById('stamps-container');
+const pin = document.createElement('div');
+pin.className = 'stamp achieved';
+pin.style.left = x + '%'; pin.style.top = y + '%';
+pin.innerText = label; pin.style.fontSize = '10px'; pin.style.color = 'black';
+pin.style.textAlign = 'center'; pin.style.lineHeight = '30px';
 container.appendChild(pin);
 }
-function exportConfig(){
-if(temporaryPins.length===0){alert("ピンがありません");return;}
-const jsonString=JSON.stringify(temporaryPins,null,2);
-navigator.clipboard.writeText(jsonString).then(()=>{
-alert("【完了】設定コードをコピーしました！\n\nコード内の「const pinPositions = ...」の部分に貼り付けてください。");
-});
+
+function downloadConfig() {
+if (pinPositions.length === 0) { alert("ピンがありません"); return; }
+const jsonString = JSON.stringify(pinPositions, null, 2);
+const blob = new Blob([jsonString], { type: "application/json" });
+const a = document.createElement("a");
+a.href = URL.createObjectURL(blob);
+a.download = "config.json";
+a.click();
+alert("「config.json」をダウンロードしました！\nGoogleドライブのフォルダにこのファイルを放り込んでください。");
 }
+
+// 起動時に設定を読み込む
+loadConfig();
 </script>
+</body>
+</html>
