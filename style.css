@@ -1,0 +1,109 @@
+/* --- 全体の基本設定 --- */
+body, html {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden; /* 画面からはみ出た部分を隠す */
+    font-family: 'Hiragino Kaku Gothic ProN', sans-serif;
+    background-color: #f0f0f0;
+}
+
+/* --- メイン画面（マップエリア） --- */
+#map-area {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#map-image {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain; /* 画像を画面いっぱいに表示しつつ、比率を保つ */
+}
+
+/* --- スタンプ（ピン）の見た目 --- */
+#stamps-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.stamp {
+    position: absolute;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background-color: #ccc; /* 未ゲットは灰色 */
+    border: 2px solid #fff;
+    box-shadow: 0 0 5px rgba(0,0,0,0.3);
+    cursor: pointer;
+    transform: translate(-50%, -50%); /* スタンプの中心をタップ位置に合わせる */
+}
+
+/* ゲットしたスタンプ（JSでクラスを追加する） */
+.stamp.achieved {
+    background-color: #ffcc00; /* ゲットしたら金色 */
+    animation: stampAppear 0.5s ease-out; /* 後で派手なアニメーションを追加 */
+}
+
+/* --- 【子ども用】カメラボタンの見た目 --- */
+#camera-button {
+    position: fixed;
+    right: 20px;
+    top: 50%; /* 画面の中央付近に配置 */
+    transform: translateY(-50%);
+    width: 60px;
+    height: 150px; /* タブレットで押しやすい大きさ */
+    background-color: #ff6666;
+    color: white;
+    border: none;
+    border-radius: 30px;
+    font-size: 20px;
+    font-weight: bold;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    cursor: pointer;
+    z-index: 100; /* 他の要素より上に表示 */
+}
+
+#camera-button:active {
+    background-color: #ff4444;
+}
+
+/* --- モードごとの表示切り替え --- */
+/* 子ども用モードのときは、先生用パネルを隠す */
+body.children-mode #admin-panel {
+    display: none;
+}
+
+/* 先生用モードのときは、カメラボタンを隠し、パネルを表示 */
+body.admin-mode #camera-button {
+    display: none;
+}
+
+body.admin-mode #admin-panel {
+    display: block;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    background-color: rgba(0,0,0,0.8);
+    color: white;
+    padding: 10px;
+    box-shadow: 0 -4px 6px rgba(0,0,0,0.3);
+    z-index: 101;
+}
+
+body.admin-mode #add-stamp-btn, body.admin-mode #save-settings-btn {
+    background-color: #444;
+    color: white;
+    border: 1px solid #fff;
+    padding: 5px 10px;
+    margin-right: 10px;
+    cursor: pointer;
+}
