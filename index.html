@@ -8,6 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 <style>
+/* 🌍 画面全体の共通設定 */
 html, body {
     margin: 0;
     padding: 0;
@@ -18,14 +19,24 @@ html, body {
     justify-content: center;
     align-items: center;
     overflow: hidden;
+    position: relative;
 }
+
+/* 🗺️ マップを基準にするための外枠（ズレ防止の要） */
+#map-wrapper {
+    position: relative;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    max-width: 100vw;
+    max-height: 100vh;
+}
+
 #map-area {
     position: relative;
     display: inline-block;
-    max-width: 100vw;
-    max-height: 100vh;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
 }
+
 #map-image {
     display: block;
     max-width: 100vw;
@@ -33,7 +44,10 @@ html, body {
     width: auto;
     height: auto;
     object-fit: contain;
+    pointer-events: auto; /* タップイベントを正確に取得 */
 }
+
+/* 📍 ピンのスタイル */
 .stamp {
     position: absolute;
     width: 32px;
@@ -43,9 +57,11 @@ html, body {
     cursor: pointer;
     box-shadow: 0 3px 6px rgba(0,0,0,0.3);
     transition: transform 0.1s;
+    z-index: 10;
 }
 .stamp:active { transform: translate(-50%, -50%) scale(0.9); }
 
+/* ポップアップ等のUI */
 .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background-color:rgba(0,0,0,0.8);z-index:200;justify-content:center;align-items:center;flex-direction:column;color:white;}
 .modal img{max-width:80%;max-height:70%;border:5px solid white;border-radius:10px;object-fit:contain;}
 .modal h2{margin-top:15px;font-size:24px;}
@@ -87,10 +103,12 @@ html, body {
 </head>
 <body class="children-mode">
 
-<main id="map-area">
-<img id="map-image" src="map.png" alt="校内マップ" onerror="this.style.display='none'; alert('map.png が見つかりません。GitHubにアップロードしてください。');">
-<div id="stamps-container"></div>
-</main>
+<div id="map-wrapper">
+    <div id="map-area">
+        <img id="map-image" src="map.png" alt="校内マップ" onerror="this.style.display='none'; alert('map.png が見つかりません。');">
+        <div id="stamps-container"></div>
+    </div>
+</div>
 
 <button id="camera-button" onclick="startCamera()">カ<br>メ<br>ラ</button>
 <button id="admin-toggle" onclick="toggleAdminMode()">⚙️ 先生モード</button>
@@ -155,7 +173,6 @@ function stagePins() {
         stamp.style.top = pin.y + '%';
         
         if (isAdmin) {
-            // 【先生モード】常にゴールド、中に管理用の「101」などを表示
             stamp.classList.add('achieved');
             stamp.innerText = pin.id;
             stamp.style.fontSize = '11px';
@@ -168,7 +185,6 @@ function stagePins() {
                 openEditPopup(index);
             });
         } else if (myStamps.includes(String(pin.id))) {
-            // 【子どもモード：発見済み】ゴールドになり、タップで写真のみ表示（数字は非表示）
             stamp.classList.add('achieved');
             stamp.innerText = "";
             stamp.addEventListener('click', (e) => {
@@ -176,7 +192,6 @@ function stagePins() {
                 showRoomDetails(pin);
             });
         } else {
-            // 【子どもモード：未発見】灰色
             stamp.innerText = "";
             stamp.style.backgroundColor = "#bdc3c7";
             stamp.style.border = "2px solid #7f8c8d";
@@ -189,25 +204,14 @@ function stagePins() {
     });
 }
 
-// 💡 子ども用：番号.jpg の写真を確実に読み込む（iPhoneの大文字JPGにも自動対応）
 function showRoomDetails(pin) {
     const imgEl = document.getElementById('modal-image');
-    
-    // まずは通常の「101.jpg」などで読み込み
     imgEl.src = `${pin.id}.jpg`;
-    
-    // エラーが起きたら大文字の「101.JPG」を自動で試す安全網
     imgEl.onerror = function() {
-        if (this.src.endsWith('.jpg')) {
-            this.src = `${pin.id}.JPG`;
-        } else if (this.src.endsWith('.JPG')) {
-            this.src = `${pin.id}.png`;
-        } else {
-            this.src = 'map.png'; // 最終的に写真がなければマップを出す
-            this.onerror = null;
-        }
+        if (this.src.endsWith('.jpg')) { this.src = `${pin.id}.JPG`; } 
+        else if (this.src.endsWith('.JPG')) { this.src = `${pin.id}.png`; } 
+        else { this.src = 'map.png'; this.onerror = null; }
     };
-
     document.getElementById('room-modal').style.display = 'flex';
 }
 
@@ -288,7 +292,7 @@ function handleScanResult(qrValue) {
         const dataStr = qrValue.replace("SET:", "");
         pinPositions = JSON.parse(dataStr);
         localStorage.setItem(STORAGE_KEY_PINS, JSON.stringify(pinPositions)); 
-        alert("⚙️ マップのセットアップが完了しました！探検をはじめよう！");
+        alert("⚙️ マップのセットアップが完了しました！");
         stopCamera();
         stagePins();
         return;
@@ -314,7 +318,6 @@ function toggleAdminMode() {
     if (isAdmin) {
         document.body.classList.remove('children-mode');
         document.body.classList.add('admin-mode');
-        alert("先生モード：タップすると自動でピンを追加します。ピンをタップすると削除できます。");
     } else {
         document.body.classList.remove('admin-mode');
         document.body.classList.add('children-mode');
@@ -323,20 +326,22 @@ function toggleAdminMode() {
     stagePins();
 }
 
-// 💡 修正：タップしたら即時で空き番号（101〜）を割り振ってピンを打つ（文字入力はなし）
-document.getElementById('map-area').addEventListener('click', function(e) {
+// 💡 修正：画像（map.png）そのものを基準にした正確な座標計算に変更
+document.getElementById('map-image').addEventListener('click', function(e) {
     if (!isAdmin) return;
-    const mapImg = document.getElementById('map-image');
-    const rect = mapImg.getBoundingClientRect();
     
+    // タップされた画像（map-image）の正確なサイズと位置を取得
+    const rect = this.getBoundingClientRect();
+    
+    // 画像の左上からのクリック位置を計算
     const clickX = e.clientX - rect.left;
     const clickY = e.clientY - rect.top;
     
+    // 画像の「実際の表示幅・高さ」に対するパーセンテージを計算
     const percentX = (clickX / rect.width) * 100;
     const percentY = (clickY / rect.height) * 100;
     
-    if (percentX < 0 || percentX > 100 || percentY < 0 || percentY > 100) return;
-    
+    // 空き番号の割り振りと追加
     let targetId = 101;
     const currentIds = pinPositions.map(p => parseInt(p.id));
     while (currentIds.includes(targetId)) {
@@ -349,6 +354,8 @@ document.getElementById('map-area').addEventListener('click', function(e) {
         y: Math.round(percentY * 100) / 100 
     });
     pinPositions.sort((a, b) => parseInt(a.id) - parseInt(b.id));
+    
+    // 即座にピン画面に連動して反映
     stagePins();
 });
 
@@ -377,27 +384,24 @@ function deletePin() {
 
 function generateAdminQR() {
     if (pinPositions.length === 0) { alert("ピンがありません"); return; }
-    
     try {
         const qrCanvas = document.getElementById('qrcode-canvas');
         qrCanvas.innerHTML = ""; 
         const qrData = "SET:" + JSON.stringify(pinPositions);
-        
         const qr = qrcode(0, 'L');
         qr.addData(qrData);
         qr.make();
-        
         qrCanvas.innerHTML = qr.createImgTag(5);
         document.getElementById('qrcode-popup').style.display = 'block';
     } catch (e) {
         alert("QRコードの生成に失敗しました。");
-        console.error(e);
     }
 }
 
-function closeQRPopup() {
-    document.getElementById('qrcode-popup').style.display = 'none';
-}
+function closeQRPopup() { document.getElementById('qrcode-popup').style.display = 'none'; }
+
+// 💡 画面サイズが変わったとき（画面の回転など）にもピンがズレないように追従させる処理
+window.addEventListener('resize', stagePins);
 
 stagePins();
 </script>
