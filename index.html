@@ -13,11 +13,35 @@
 .modal h2{margin-top:15px;font-size:24px;}
 .close-btn{margin-top:15px;padding:10px 20px;background-color:#ff6666;color:white;border:none;border-radius:50px;font-size:18px;cursor:pointer;}
 #admin-toggle{position:fixed;left:10px;bottom:10px;background:rgba(0,0,0,0.5);color:white;border:none;padding:5px 10px;border-radius:5px;font-size:12px;z-index:150;cursor:pointer;}
+
+/* 📸 カメラ画面用の完全全画面スタイル（チェッカーの仕様を統合） */
 #camera-container{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:300;flex-direction:column;justify-content:center;align-items:center;}
 #webcam-video{width:100%;height:80%;object-fit:cover;}
-#camera-close-btn{position:fixed;bottom:30px;padding:15px 30px;background:#ff6666;color:white;border:none;border-radius:50px;font-size:20px;font-weight:bold;cursor:pointer;}
+#camera-close-btn{position:fixed;bottom:30px;padding:15px 30px;background:#ff6666;color:white;border:none;border-radius:50px;font-size:20px;font-weight:bold;cursor:pointer;z-index:310;}
+
 #qrcode-popup{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:10px;box-shadow:0 0 20px rgba(0,0,0,0.5);z-index:400;text-align:center;color:black;}
 #qrcode-canvas{margin:15px auto;display:flex;justify-content:center;}
+
+/* 📍 マップとピンの位置ズレを完全に防ぐコンテナ設定 */
+#map-area {
+    position: relative;
+    display: inline-block;
+    max-width: 100%;
+}
+#map-image {
+    display: block;
+    max-width: 100%;
+    height: auto;
+}
+.stamp {
+    position: absolute;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%); /* タップした中心点にピタッと合わせる */
+    cursor: pointer;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+}
 </style>
 </head>
 <body class="children-mode">
@@ -33,6 +57,7 @@
 <div id="camera-container">
     <video id="webcam-video" autoplay playsinline></video>
     <button id="camera-close-btn" onclick="stopCamera()">もどる</button>
+    <canvas id="qr-canvas" hidden></canvas>
 </div>
 
 <div id="admin-panel">
@@ -62,6 +87,7 @@ let myStamps = [];
 const STORAGE_KEY_PINS = 'school_qr_pins';
 const STORAGE_KEY_STAMPS = 'school_qr_stamps';
 
+// ローカルストレージ復元
 if (localStorage.getItem(STORAGE_KEY_PINS)) {
     pinPositions = JSON.parse(localStorage.getItem(STORAGE_KEY_PINS));
 }
@@ -69,28 +95,43 @@ if (localStorage.getItem(STORAGE_KEY_STAMPS)) {
     myStamps = JSON.parse(localStorage.getItem(STORAGE_KEY_STAMPS));
 }
 
+// 📍 ピンの描画（子どもモードと先生モードで見た目を切り替え）
 function stagePins() {
     const container = document.getElementById('stamps-container');
     container.innerHTML = "";
-    if (isAdmin) {
-        pinPositions.forEach(p => createTempPin(p.x, p.y, p.id));
-        return;
-    }
+    
     pinPositions.forEach(pin => {
         const stamp = document.createElement('div');
         stamp.className = 'stamp';
         stamp.style.left = pin.x + '%';
         stamp.style.top = pin.y + '%';
-        if (myStamps.includes(pin.id)) {
+        
+        if (isAdmin) {
+            // 先生モード：すべて金色、中に登録番号を表示
             stamp.classList.add('achieved');
+            stamp.innerText = pin.id;
+            stamp.style.fontSize = '9px';
+            stamp.style.color = 'black';
+            stamp.style.fontWeight = 'bold';
+            stamp.style.textAlign = 'center';
+            stamp.style.lineHeight = '30px';
+        } else if (myStamps.includes(pin.id)) {
+            // 子どもモード（発見済み）：金色になり、タップで写真ポップアップ
+            stamp.classList.add('achieved');
+            stamp.innerText = "";
+            stamp.style.background = ""; // style.cssの.achievedに従う
             stamp.addEventListener('click', (e) => {
                 e.stopPropagation();
                 showRoomDetails(pin.id);
             });
         } else {
+            // 子どもモード（未発見）：灰色、タップするとヒント
+            stamp.innerText = "";
+            stamp.style.backgroundColor = "#bdc3c7";
+            stamp.style.border = "2px solid #7f8c8d";
             stamp.addEventListener('click', (e) => {
                 e.stopPropagation();
-                alert("ここは まだ見つけていないよ！QRコードを探そう！");
+                alert("ここは まだ見つけていないよ！校内を探してQRコードを見つけよう！");
             });
         }
         container.appendChild(stamp);
@@ -98,7 +139,6 @@ function stagePins() {
 }
 
 function showRoomDetails(qrId) {
-    // 教室の写真もGitHub内の「1001.jpg」などを直接見に行くようにしてCORSを完全回避
     document.getElementById('modal-image').src = `${qrId}.jpg`; 
     document.getElementById('modal-title').innerText = `${qrId} の へや`;
     document.getElementById('room-modal').style.display = 'flex';
@@ -108,77 +148,109 @@ function closeModal() {
     document.getElementById('room-modal').style.display = 'none';
 }
 
-// === 📸 カメラ（QR読み取り）機能 ===
+// === 📸 チェッカーの仕組みを完全移植したQRコード読み取り機能 ===
 let videoStream = null;
-let animationFrameId = null;
+let isScanning = false;
+let lastCode = "";
+let lastTime = 0;
+
+// ピッと音を鳴らすオーディオ関数も移植
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function playBeep() {
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain); gain.connect(audioCtx.destination);
+    osc.type = 'sine'; osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+    osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+}
 
 function startCamera() {
     const video = document.getElementById('webcam-video');
     document.getElementById('camera-container').style.display = 'flex';
+    
+    // 背面カメラ（environment）を優先的に起動
     navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
     .then(stream => {
         videoStream = stream;
         video.srcObject = stream;
-        animationFrameId = requestAnimationFrame(scanQRCode);
+        isScanning = true;
+        requestAnimationFrame(tick); // ループ処理開始
     })
     .catch(err => {
-        alert("カメラが起動できませんでした。カメラの権限を許可してください。");
+        alert("カメラが起動できませんでした。ブラウザの設定でカメラを許可してください。");
         stopCamera();
     });
 }
 
 function stopCamera() {
+    isScanning = false;
     document.getElementById('camera-container').style.display = 'none';
-    if (videoStream) videoStream.getTracks().forEach(track => track.stop());
-    if (animationFrameId) cancelAnimationFrame(animationFrameId);
+    if (videoStream) {
+        videoStream.getTracks().forEach(track => track.stop());
+        videoStream = null;
+    }
 }
 
-function scanQRCode() {
+// チェッカーの安定スキャン処理（tick）を100%移植
+function tick() {
+    if (!isScanning) return;
+    
     const video = document.getElementById('webcam-video');
-    if (video.readyState === video.HAVE_CURRENT_DATA) {
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
+    const canvas = document.getElementById('qr-canvas');
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    
+    // 💡 HAVE_ENOUGH_DATA で完全に映像が乗った瞬間を判定
+    if (video.readyState === video.HAVE_ENOUGH_DATA) {
         canvas.height = video.videoHeight;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.width = video.videoWidth;
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
         
-        try {
-            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-            const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
-            
-            if (code) {
-                const qrValue = code.data;
-                
-                if (qrValue.startsWith("SET:")) {
-                    const dataStr = qrValue.replace("SET:", "");
-                    pinPositions = JSON.parse(dataStr);
-                    localStorage.setItem(STORAGE_KEY_PINS, JSON.stringify(pinPositions)); 
-                    alert("⚙️ マップのセットアップが完了しました！探検をはじめよう！");
-                    stopCamera();
-                    stagePins();
-                    return;
-                }
-                
-                const hitPin = pinPositions.find(p => p.id === qrValue);
-                if (hitPin) {
-                    if (!myStamps.includes(qrValue)) {
-                        myStamps.push(qrValue);
-                        localStorage.setItem(STORAGE_KEY_STAMPS, JSON.stringify(myStamps));
-                        alert(`🎉おめでとう！ [${qrValue}] をみつけたよ！`);
-                    } else {
-                        alert(`もう持っているスタンプだよ！`);
-                    }
-                    stopCamera();
-                    stagePins();
-                    return;
-                }
+        const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height);
+        
+        if (code) {
+            const now = Date.now();
+            // 連続誤認を防ぐディレイ処理
+            if (code.data !== lastCode || now - lastTime > 800) {
+                lastCode = code.data;
+                lastTime = now;
+                handleScanResult(code.data);
             }
-        } catch (e) {
-            // エラーが起きてもフリーズせずに処理を続けるための安全弁
-            console.error(e);
         }
     }
-    animationFrameId = requestAnimationFrame(scanQRCode);
+    requestAnimationFrame(tick);
+}
+
+// 読み取ったデータに応じた処理
+function handleScanResult(qrValue) {
+    // 1. 先生用マスターQRコードだった場合
+    if (qrValue.startsWith("SET:")) {
+        playBeep();
+        const dataStr = qrValue.replace("SET:", "");
+        pinPositions = JSON.parse(dataStr);
+        localStorage.setItem(STORAGE_KEY_PINS, JSON.stringify(pinPositions)); 
+        alert("⚙️ マップのセットアップが完了しました！探検をはじめよう！");
+        stopCamera();
+        stagePins();
+        return;
+    }
+    
+    // 2. 子ども用スタンプQRコードだった場合
+    const hitPin = pinPositions.find(p => p.id === qrValue);
+    if (hitPin) {
+        if (!myStamps.includes(qrValue)) {
+            playBeep();
+            myStamps.push(qrValue);
+            localStorage.setItem(STORAGE_KEY_STAMPS, JSON.stringify(myStamps));
+            alert(`🎉おめでとう！ [${qrValue}] のスタンプをゲットしたよ！`);
+        } else {
+            alert(`もう持っているスタンプだよ！`);
+        }
+        stopCamera();
+        stagePins();
+    }
 }
 
 // === ⚙️ 先生モードの処理 ===
@@ -187,7 +259,7 @@ function toggleAdminMode() {
     if (isAdmin) {
         document.body.classList.remove('children-mode');
         document.body.classList.add('admin-mode');
-        alert("先生モード：マップ上をタップしてピンを配置してください。");
+        alert("先生モードになりました。マップの上をタップしてピンを配置してください。");
     } else {
         document.body.classList.remove('admin-mode');
         document.body.classList.add('children-mode');
@@ -195,28 +267,30 @@ function toggleAdminMode() {
     stagePins();
 }
 
+// 📍 画像の幅・高さの比率から正確な％を算出（これで端末サイズによらずズレません）
 document.getElementById('map-area').addEventListener('click', function(e) {
     if (!isAdmin) return;
-    const rect = document.getElementById('map-image').getBoundingClientRect();
-    const percentX = ((e.clientX - rect.left) / rect.width) * 100;
-    const percentY = ((e.clientY - rect.top) / rect.height) * 100;
+    const mapImg = document.getElementById('map-image');
+    const rect = mapImg.getBoundingClientRect();
+    
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    
+    const percentX = (clickX / rect.width) * 100;
+    const percentY = (clickY / rect.height) * 100;
+    
     if (percentX < 0 || percentX > 100 || percentY < 0 || percentY > 100) return;
-    const qrId = prompt("QRコード番号を入力（例: 1001）");
+    
+    const qrId = prompt("この場所のQRコード番号を入力してください（例: 1001）");
     if (qrId) {
-        createTempPin(percentX, percentY, qrId);
-        pinPositions.push({ id: qrId, x: Math.round(percentX * 100) / 100, y: Math.round(percentY * 100) / 100 });
+        pinPositions.push({ 
+            id: qrId, 
+            x: Math.round(percentX * 100) / 100, 
+            y: Math.round(percentY * 100) / 100 
+        });
+        stagePins(); // 配置直後にその場にピンを描画
     }
 });
-
-function createTempPin(x, y, label) {
-    const container = document.getElementById('stamps-container');
-    const pin = document.createElement('div');
-    pin.className = 'stamp achieved';
-    pin.style.left = x + '%'; pin.style.top = y + '%';
-    pin.innerText = label; pin.style.fontSize = '10px'; pin.style.color = 'black';
-    pin.style.textAlign = 'center'; pin.style.lineHeight = '30px';
-    container.appendChild(pin);
-}
 
 function generateAdminQR() {
     if (pinPositions.length === 0) { alert("ピンがありません"); return; }
@@ -235,6 +309,7 @@ function closeQRPopup() {
     document.getElementById('qrcode-popup').style.display = 'none';
 }
 
+// 初回起動時のピン表示
 stagePins();
 </script>
 </body>
