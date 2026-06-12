@@ -45,14 +45,13 @@ html, body {
     cursor: pointer;
 }
 
-/* 📍 ピンの土台：マップのタップを邪魔しないよう配置 */
 #stamps-container {
     position: absolute;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    pointer-events: none; /* これにより下の画像へのタップが貫通します */
+    pointer-events: none;
 }
 
 .stamp {
@@ -64,7 +63,7 @@ html, body {
     cursor: pointer;
     box-shadow: 0 3px 6px rgba(0,0,0,0.3);
     transition: transform 0.1s;
-    pointer-events: auto; /* ピン自体はしっかりタップできるようにする */
+    pointer-events: auto;
     z-index: 10;
 }
 .stamp:active { transform: translate(-50%, -50%) scale(0.9); }
@@ -73,7 +72,6 @@ html, body {
 .modal img{max-width:80%;max-height:70%;border:5px solid white;border-radius:10px;object-fit:contain;}
 .modal h2{margin-top:15px;font-size:24px;}
 .close-btn{margin-top:15px;padding:10px 20px;background-color:#ff6666;color:white;border:none;border-radius:50px;font-size:18px;cursor:pointer;}
-#admin-toggle{position:fixed;left:10px;bottom:10px;background:rgba(0,0,0,0.6);color:white;border:none;padding:8px 12px;border-radius:5px;font-size:12px;z-index:150;cursor:pointer;}
 
 #camera-container{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:300;flex-direction:column;justify-content:center;align-items:center;}
 #webcam-video{width:100%;height:80%;object-fit:cover;}
@@ -118,17 +116,10 @@ html, body {
 </div>
 
 <button id="camera-button" onclick="startCamera()">カ<br>メ<br>ラ</button>
-<button id="admin-toggle" onclick="toggleAdminMode()">⚙️ 先生モード</button>
-
-<div id="camera-container">
-    <video id="webcam-video" autoplay playsinline></video>
-    <button id="camera-close-btn" onclick="stopCamera()">もどる</button>
-    <canvas id="qr-canvas" hidden></canvas>
-</div>
 
 <div id="admin-panel">
 <h3>【先生用】設定モード</h3>
-<p>①マップをタップしてピンを配置 ➡️ ②右のボタンを押す</p>
+<p>マップをタップしてピンを配置できます</p>
 <button id="save-settings-btn" onclick="generateAdminQR()">📱 配布用マスターQRコードを作る</button>
 </div>
 
@@ -167,6 +158,71 @@ if (localStorage.getItem(STORAGE_KEY_PINS)) {
 }
 if (localStorage.getItem(STORAGE_KEY_STAMPS)) {
     myStamps = JSON.parse(localStorage.getItem(STORAGE_KEY_STAMPS));
+}
+
+// 💡 隠しコマンド（キー連打）を判定するための変数
+let tKeyCount = 0;
+let rKeyCount = 0;
+let lastKeyTime = 0;
+
+// 💡 キーボード入力を監視するイベントリスナー
+window.addEventListener('keydown', function(e) {
+    const now = Date.now();
+    // 前の入力から1秒以上経っていたらリセット
+    if (now - lastKeyTime > 1000) {
+        tKeyCount = 0;
+        rKeyCount = 0;
+    }
+    lastKeyTime = now;
+
+    // 「t」キーが押されたとき
+    if (e.key === 't' || e.key === 'T') {
+        tKeyCount++;
+        rKeyCount = 0; // 他のキーのカウントはクリア
+        if (tKeyCount === 3) {
+            tKeyCount = 0;
+            toggleAdminMode();
+        }
+    }
+    // 「r」キーが押されたとき
+    else if (e.key === 'r' || e.key === 'R') {
+        rKeyCount++;
+        tKeyCount = 0; // 他のキーのカウントはクリア
+        if (rKeyCount === 3) {
+            rKeyCount = 0;
+            resetAllData();
+        }
+    } else {
+        tKeyCount = 0;
+        rKeyCount = 0;
+    }
+});
+
+function toggleAdminMode() {
+    isAdmin = !isAdmin;
+    if (isAdmin) {
+        document.body.classList.remove('children-mode');
+        document.body.classList.add('admin-mode');
+        alert("⚙️ 先生モードを起動しました：マップをタップしてピンを追加できます。");
+    } else {
+        document.body.classList.remove('admin-mode');
+        document.body.classList.add('children-mode');
+        closeEditPopup();
+        alert("🎒 子どもモード（探検モード）に戻りました。");
+    }
+    stagePins();
+}
+
+// 💡 修正：データを完全に初期化するリセット機能
+function resetAllData() {
+    if (confirm("🚨 これまでのスタンプ記録と、マップに配置したピンの設定をすべて消去して最初の状態に戻しますか？")) {
+        localStorage.removeItem(STORAGE_KEY_PINS);
+        localStorage.removeItem(STORAGE_KEY_STAMPS);
+        pinPositions = [];
+        myStamps = [];
+        stagePins();
+        alert("データをすべてリセットしました。");
+    }
 }
 
 function stagePins() {
@@ -294,14 +350,13 @@ function tick() {
 }
 
 function handleScanResult(qrValue) {
-    // 💡 修正：マスターQR読み込み後は、文字を出さずに「すぐにマップを表示」
     if (qrValue.startsWith("SET:")) {
         playBeep();
         const dataStr = qrValue.replace("SET:", "");
         pinPositions = JSON.parse(dataStr);
         localStorage.setItem(STORAGE_KEY_PINS, JSON.stringify(pinPositions)); 
-        stopCamera(); // カメラをすぐに閉じる
-        stagePins();  // マップに即反映
+        stopCamera();
+        stagePins();
         return;
     }
     
@@ -312,28 +367,12 @@ function handleScanResult(qrValue) {
             myStamps.push(String(qrValue));
             localStorage.setItem(STORAGE_KEY_STAMPS, JSON.stringify(myStamps));
         }
-        stopCamera(); // カメラをすぐに閉じる
-        stagePins();  // マップを更新
-        
-        // 💡 修正：教室QR読み込み後、すぐにピンを押したときの画面（教室の画像）を表示
+        stopCamera();
+        stagePins();
         showRoomDetails(hitPin);
     }
 }
 
-function toggleAdminMode() {
-    isAdmin = !isAdmin;
-    if (isAdmin) {
-        document.body.classList.remove('children-mode');
-        document.body.classList.add('admin-mode');
-    } else {
-        document.body.classList.remove('admin-mode');
-        document.body.classList.add('children-mode');
-        closeEditPopup();
-    }
-    stagePins();
-}
-
-// 💡 修正：マップ画像のタップ判定を100%確実に拾える構造へ修正
 document.getElementById('map-image').addEventListener('click', function(e) {
     if (!isAdmin) return;
     
@@ -357,7 +396,6 @@ document.getElementById('map-image').addEventListener('click', function(e) {
     });
     pinPositions.sort((a, b) => parseInt(a.id) - parseInt(b.id));
     
-    // 即時反映
     stagePins();
 });
 
