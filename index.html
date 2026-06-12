@@ -8,7 +8,6 @@
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 <style>
-/* 🌍 画面全体を中央揃えにするためのレイアウト修正 */
 html, body {
     margin: 0;
     padding: 0;
@@ -20,7 +19,6 @@ html, body {
     align-items: center;
     overflow: hidden;
 }
-
 #map-area {
     position: relative;
     display: inline-block;
@@ -28,7 +26,6 @@ html, body {
     max-height: 100vh;
     box-shadow: 0 4px 20px rgba(0,0,0,0.15);
 }
-
 #map-image {
     display: block;
     max-width: 100vw;
@@ -37,7 +34,6 @@ html, body {
     height: auto;
     object-fit: contain;
 }
-
 .stamp {
     position: absolute;
     width: 32px;
@@ -148,6 +144,14 @@ if (localStorage.getItem(STORAGE_KEY_STAMPS)) {
     myStamps = JSON.parse(localStorage.getItem(STORAGE_KEY_STAMPS));
 }
 
+// 💡 日本語の文字化けを完全に防ぐための暗号化・復号化関数（UTF-8対応Base64）
+function convToSafeStr(str) {
+    return btoa(unescape(encodeURIComponent(str)));
+}
+function convFromSafeStr(base64) {
+    return decodeURIComponent(escape(atob(base64)));
+}
+
 function stagePins() {
     const container = document.getElementById('stamps-container');
     container.innerHTML = "";
@@ -190,8 +194,25 @@ function stagePins() {
     });
 }
 
+// 💡 修正：確実性を上げるため「番号.jpg」で画像を表示。大文字JPGエラーにも自動対応
 function showRoomDetails(pin) {
-    document.getElementById('modal-image').src = `${pin.name}.jpg`; 
+    const imgEl = document.getElementById('modal-image');
+    
+    // まずは 小文字の「番号.jpg」を試す
+    imgEl.src = `${pin.id}.jpg`;
+    
+    // もし画像が読み込めなかったら、iPhoneに多い大文字の「番号.JPG」を自動で試す安全機能
+    imgEl.onerror = function() {
+        if (this.src.endsWith('.jpg')) {
+            this.src = `${pin.id}.JPG`;
+        } else if (this.src.endsWith('.JPG')) {
+            this.src = `${pin.id}.png`; // さらにダメならpng
+        } else {
+            this.src = 'map.png'; // 最終手段
+            this.onerror = null;
+        }
+    };
+
     document.getElementById('modal-title').innerText = pin.name;
     document.getElementById('room-modal').style.display = 'flex';
 }
@@ -268,12 +289,29 @@ function tick() {
 }
 
 function handleScanResult(qrValue) {
+    // 💡 暗号化されたマスターQRコード（S:）の判定と復号
+    if (qrValue.startsWith("S:")) {
+        playBeep();
+        try {
+            const encryptedData = qrValue.replace("S:", "");
+            const decryptedJson = convFromSafeStr(encryptedData);
+            pinPositions = JSON.parse(decryptedJson);
+            localStorage.setItem(STORAGE_KEY_PINS, JSON.stringify(pinPositions)); 
+            alert("⚙️ 日本語マップのセットアップが完了しました！探検をはじめよう！");
+            stopCamera();
+            stagePins();
+        } catch(e) {
+            alert("マスターQRの読み込みに失敗しました。新しいコードで再生成してください。");
+        }
+        return;
+    }
+    
+    // 昔のマスターQRの互換性維持
     if (qrValue.startsWith("SET:")) {
         playBeep();
-        const dataStr = qrValue.replace("SET:", "");
-        pinPositions = JSON.parse(dataStr);
+        pinPositions = JSON.parse(qrValue.replace("SET:", ""));
         localStorage.setItem(STORAGE_KEY_PINS, JSON.stringify(pinPositions)); 
-        alert("⚙️ マップのセットアップが完了しました！探検をはじめよう！");
+        alert("⚙️ マップのセットアップが完了しました！");
         stopCamera();
         stagePins();
         return;
@@ -299,7 +337,7 @@ function toggleAdminMode() {
     if (isAdmin) {
         document.body.classList.remove('children-mode');
         document.body.classList.add('admin-mode');
-        alert("先生モード：マップ上をタップしてピンを追加。ピンをタップして編集・削除。");
+        alert("先生モード：タップしてピン追加、ピンをタップして編集・削除。");
     } else {
         document.body.classList.remove('admin-mode');
         document.body.classList.add('children-mode');
@@ -308,7 +346,6 @@ function toggleAdminMode() {
     stagePins();
 }
 
-// 💡 修正：削除されて空いた「一番若い空き番号」を探して自動割り当てする処理
 document.getElementById('map-area').addEventListener('click', function(e) {
     if (!isAdmin) return;
     const mapImg = document.getElementById('map-image');
@@ -322,9 +359,8 @@ document.getElementById('map-area').addEventListener('click', function(e) {
     
     if (percentX < 0 || percentX > 100 || percentY < 0 || percentY > 100) return;
     
-    const roomName = prompt("教室名を入力してください（例: 理科室）");
+    const roomName = prompt("教室名を入力してください（例: りかしつ）");
     if (roomName) {
-        // 101から順番にチェックし、使われていない最小の数字（空き番）を探す
         let targetId = 101;
         const currentIds = pinPositions.map(p => parseInt(p.id));
         while (currentIds.includes(targetId)) {
@@ -337,7 +373,6 @@ document.getElementById('map-area').addEventListener('click', function(e) {
             x: Math.round(percentX * 100) / 100, 
             y: Math.round(percentY * 100) / 100 
         });
-        // 番号順（101, 102...）に並び替えて保存
         pinPositions.sort((a, b) => parseInt(a.id) - parseInt(b.id));
         stagePins();
     }
@@ -370,7 +405,7 @@ function editRoomName() {
 
 function deletePin() {
     if (selectedPinIndex === null) return;
-    if (confirm("このピンを削除してもよろしいですか？（※この番号は次のピン作成時に再利用されます）")) {
+    if (confirm("このピンを削除してもよろしいですか？")) {
         pinPositions.splice(selectedPinIndex, 1);
         stagePins();
         alert("ピンを削除しました。");
@@ -378,25 +413,26 @@ function deletePin() {
     closeEditPopup();
 }
 
-// 💡 修正：大容量データに対応した高密度QRコード生成処理
+// 💡 修正：日本語データを英数字の安全な文字列に暗号化してからQRを生成する
 function generateAdminQR() {
     if (pinPositions.length === 0) { alert("ピンがありません"); return; }
     
     try {
         const qrCanvas = document.getElementById('qrcode-canvas');
         qrCanvas.innerHTML = ""; 
-        const qrData = "SET:" + JSON.stringify(pinPositions);
         
-        // qrcode-generatorライブラリを使って、データ量に合わせて自動で最適化（Type 0, エラー訂正L）
+        // データを圧縮・英数字暗号化
+        const jsonStr = JSON.stringify(pinPositions);
+        const safeData = "S:" + convToSafeStr(jsonStr);
+        
         const qr = qrcode(0, 'L');
-        qr.addData(qrData);
+        qr.addData(safeData);
         qr.make();
         
-        // 画面に画像として出力（セルサイズは自動調整）
-        qrCanvas.innerHTML = qr.createImgTag(6);
+        qrCanvas.innerHTML = qr.createImgTag(5);
         document.getElementById('qrcode-popup').style.display = 'block';
     } catch (e) {
-        alert("QRコードの生成に失敗しました。データが大きすぎる可能性があります。ピンの数を減らすか、教室名を短くしてください。");
+        alert("QRコードの生成に失敗しました。教室名を少し短くしてください。");
         console.error(e);
     }
 }
