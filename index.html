@@ -6,42 +6,63 @@
 <title>QR校内探検マップ</title>
 <link rel="stylesheet" href="style.css">
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js"></script>
 <style>
+/* 🌍 画面全体を中央揃えにするためのレイアウト修正 */
+html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #f0f0f0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+#map-area {
+    position: relative;
+    display: inline-block;
+    max-width: 100vw;
+    max-height: 100vh;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+}
+
+#map-image {
+    display: block;
+    max-width: 100vw;
+    max-height: 100vh;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+}
+
+.stamp {
+    position: absolute;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.3);
+    transition: transform 0.1s;
+}
+.stamp:active { transform: translate(-50%, -50%) scale(0.9); }
+
 .modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background-color:rgba(0,0,0,0.8);z-index:200;justify-content:center;align-items:center;flex-direction:column;color:white;}
 .modal img{max-width:80%;max-height:70%;border:5px solid white;border-radius:10px;object-fit:contain;}
 .modal h2{margin-top:15px;font-size:24px;}
 .close-btn{margin-top:15px;padding:10px 20px;background-color:#ff6666;color:white;border:none;border-radius:50px;font-size:18px;cursor:pointer;}
-#admin-toggle{position:fixed;left:10px;bottom:10px;background:rgba(0,0,0,0.5);color:white;border:none;padding:5px 10px;border-radius:5px;font-size:12px;z-index:150;cursor:pointer;}
+#admin-toggle{position:fixed;left:10px;bottom:10px;background:rgba(0,0,0,0.6);color:white;border:none;padding:8px 12px;border-radius:5px;font-size:12px;z-index:150;cursor:pointer;}
 
 #camera-container{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:300;flex-direction:column;justify-content:center;align-items:center;}
 #webcam-video{width:100%;height:80%;object-fit:cover;}
 #camera-close-btn{position:fixed;bottom:30px;padding:15px 30px;background:#ff6666;color:white;border:none;border-radius:50px;font-size:20px;font-weight:bold;cursor:pointer;z-index:310;}
 
-#qrcode-popup{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:10px;box-shadow:0 0 20px rgba(0,0,0,0.5);z-index:400;text-align:center;color:black;}
-#qrcode-canvas{margin:15px auto;display:flex;justify-content:center;}
+#qrcode-popup{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:25px;border-radius:15px;box-shadow:0 0 30px rgba(0,0,0,0.5);z-index:400;text-align:center;color:black;width:85%;max-width:320px;}
+#qrcode-canvas img { max-width: 100%; height: auto; margin: 15px auto; display: block; }
 
-#map-area {
-    position: relative;
-    display: inline-block;
-    max-width: 100%;
-}
-#map-image {
-    display: block;
-    max-width: 100%;
-    height: auto;
-}
-.stamp {
-    position: absolute;
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    transform: translate(-50%, -50%);
-    cursor: pointer;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-}
-
-/* ⚙️ 先生用の編集・削除ポップアップ用スタイル */
 .admin-edit-popup {
     display: none;
     position: fixed;
@@ -58,11 +79,13 @@
     width: 280px;
 }
 .admin-edit-popup button {
-    margin: 5px;
-    padding: 8px 15px;
+    margin: 6px;
+    padding: 10px 20px;
     border: none;
     border-radius: 5px;
     cursor: pointer;
+    width: 80%;
+    font-size: 14px;
 }
 </style>
 </head>
@@ -90,21 +113,21 @@
 
 <div id="qrcode-popup">
     <h3>子どもたちに読み込ませるQRコード</h3>
-    <p>このQRを児童の端末のカメラで読み取ると、マップが一瞬で完成します！</p>
+    <p style="font-size:13px; color:#555;">このQRを児童のカメラで読み取ると、マップのピンが一瞬で復元します！</p>
     <div id="qrcode-canvas"></div>
     <button class="close-btn" style="background:#444;" onclick="closeQRPopup()">とじる</button>
 </div>
 
 <div id="admin-edit-popup" class="admin-edit-popup">
     <h3 id="edit-popup-title">ピンの編集</h3>
-    <p id="edit-popup-info"></p>
+    <p id="edit-popup-info" style="font-weight:bold; color:#2c3e50;"></p>
     <button onclick="editRoomName()" style="background:#3498db; color:white;">教室名を変える</button><br>
     <button onclick="deletePin()" style="background:#e74c3c; color:white;">このピンを削除する</button><br>
     <button onclick="closeEditPopup()" style="background:#7f8c8d; color:white;">とじる</button>
 </div>
 
 <div id="room-modal" class="modal" onclick="closeModal()">
-<img id="modal-image" src="" alt="教室の様子" onerror="this.src='map.png'; console.log('画像が見つからないためマップで代用します');">
+<img id="modal-image" src="" alt="教室の様子">
 <h2 id="modal-title">教室名</h2>
 <button class="close-btn">とじる</button>
 </div>
@@ -113,7 +136,7 @@
 let isAdmin = false;
 let pinPositions = [];
 let myStamps = [];
-let selectedPinIndex = null; // 編集中のピンを特定するインデックス
+let selectedPinIndex = null;
 
 const STORAGE_KEY_PINS = 'school_qr_pins';
 const STORAGE_KEY_STAMPS = 'school_qr_stamps';
@@ -125,7 +148,6 @@ if (localStorage.getItem(STORAGE_KEY_STAMPS)) {
     myStamps = JSON.parse(localStorage.getItem(STORAGE_KEY_STAMPS));
 }
 
-// 📍 ピンの描画処理
 function stagePins() {
     const container = document.getElementById('stamps-container');
     container.innerHTML = "";
@@ -137,22 +159,18 @@ function stagePins() {
         stamp.style.top = pin.y + '%';
         
         if (isAdmin) {
-            // 【先生モード】常にゴールド、中に「101」などのQR番号を表示
             stamp.classList.add('achieved');
             stamp.innerText = pin.id;
-            stamp.style.fontSize = '10px';
+            stamp.style.fontSize = '11px';
             stamp.style.color = 'black';
             stamp.style.fontWeight = 'bold';
             stamp.style.textAlign = 'center';
-            stamp.style.lineHeight = '30px';
-            
-            // 💡 タップしたら「修正・削除ポップアップ」を開く
+            stamp.style.lineHeight = '32px';
             stamp.addEventListener('click', (e) => {
                 e.stopPropagation();
                 openEditPopup(index);
             });
         } else if (myStamps.includes(String(pin.id))) {
-            // 【子どもモード：発見済み】ゴールドになり、タップで「教室名.jpg」を表示
             stamp.classList.add('achieved');
             stamp.innerText = "";
             stamp.addEventListener('click', (e) => {
@@ -160,7 +178,6 @@ function stagePins() {
                 showRoomDetails(pin);
             });
         } else {
-            // 【子どもモード：未発見】灰色
             stamp.innerText = "";
             stamp.style.backgroundColor = "#bdc3c7";
             stamp.style.border = "2px solid #7f8c8d";
@@ -173,9 +190,7 @@ function stagePins() {
     });
 }
 
-// 💡 子ども用：教室名と同一の画像名（例：理科室.jpg）を表示する処理
 function showRoomDetails(pin) {
-    // 教室名と全く同じ画像ファイル（例: 理科室.jpg）をGitHubから読み込む
     document.getElementById('modal-image').src = `${pin.name}.jpg`; 
     document.getElementById('modal-title').innerText = pin.name;
     document.getElementById('room-modal').style.display = 'flex';
@@ -185,7 +200,7 @@ function closeModal() {
     document.getElementById('room-modal').style.display = 'none';
 }
 
-// === 📸 QRコード読み取り機能 ===
+// === 📸 QR読取ロジック ===
 let videoStream = null;
 let isScanning = false;
 let lastCode = "";
@@ -264,7 +279,6 @@ function handleScanResult(qrValue) {
         return;
     }
     
-    // 子ども用スタンプQRの判定（文字列として比較）
     const hitPin = pinPositions.find(p => String(p.id) === String(qrValue));
     if (hitPin) {
         if (!myStamps.includes(String(qrValue))) {
@@ -280,13 +294,12 @@ function handleScanResult(qrValue) {
     }
 }
 
-// === ⚙️ 先生モードの処理 ===
 function toggleAdminMode() {
     isAdmin = !isAdmin;
     if (isAdmin) {
         document.body.classList.remove('children-mode');
         document.body.classList.add('admin-mode');
-        alert("先生モード：マップ上をタップしてピンを配置します。配置済みのピンをタップすると修正・削除ができます。");
+        alert("先生モード：マップ上をタップしてピンを追加。ピンをタップして編集・削除。");
     } else {
         document.body.classList.remove('admin-mode');
         document.body.classList.add('children-mode');
@@ -295,7 +308,7 @@ function toggleAdminMode() {
     stagePins();
 }
 
-// 💡 ピンを追加する処理（教室名のみ入力、番号は101からの連番で自動付与）
+// 💡 修正：削除されて空いた「一番若い空き番号」を探して自動割り当てする処理
 document.getElementById('map-area').addEventListener('click', function(e) {
     if (!isAdmin) return;
     const mapImg = document.getElementById('map-image');
@@ -311,31 +324,30 @@ document.getElementById('map-area').addEventListener('click', function(e) {
     
     const roomName = prompt("教室名を入力してください（例: 理科室）");
     if (roomName) {
-        // 次のQR番号を自動決定（既存の最大番号+1、何もなければ101からスタート）
-        let nextId = 101;
-        if (pinPositions.length > 0) {
-            const maxId = Math.max(...pinPositions.map(p => parseInt(p.id)));
-            if (!isNaN(maxId) && maxId >= 101) {
-                nextId = maxId + 1;
-            }
+        // 101から順番にチェックし、使われていない最小の数字（空き番）を探す
+        let targetId = 101;
+        const currentIds = pinPositions.map(p => parseInt(p.id));
+        while (currentIds.includes(targetId)) {
+            targetId++;
         }
         
         pinPositions.push({ 
-            id: String(nextId), 
+            id: String(targetId), 
             name: roomName,
             x: Math.round(percentX * 100) / 100, 
             y: Math.round(percentY * 100) / 100 
         });
+        // 番号順（101, 102...）に並び替えて保存
+        pinPositions.sort((a, b) => parseInt(a.id) - parseInt(b.id));
         stagePins();
     }
 });
 
-// 💡 先生用：編集ポップアップを開く
 function openEditPopup(index) {
     selectedPinIndex = index;
     const pin = pinPositions[index];
     document.getElementById('edit-popup-title').innerText = `QR番号: ${pin.id}`;
-    document.getElementById('edit-popup-info').innerText = `現在の名前: ${pin.name}`;
+    document.getElementById('edit-popup-info').innerText = `教室名: ${pin.name}`;
     document.getElementById('admin-edit-popup').style.display = 'block';
 }
 
@@ -344,7 +356,6 @@ function closeEditPopup() {
     selectedPinIndex = null;
 }
 
-// 💡 先生用：教室名を変更する
 function editRoomName() {
     if (selectedPinIndex === null) return;
     const currentPin = pinPositions[selectedPinIndex];
@@ -357,10 +368,9 @@ function editRoomName() {
     closeEditPopup();
 }
 
-// 💡 先生用：ピンを削除する
 function deletePin() {
     if (selectedPinIndex === null) return;
-    if (confirm("このピンを削除してもよろしいですか？（※割り振られていたQR番号は欠番になります）")) {
+    if (confirm("このピンを削除してもよろしいですか？（※この番号は次のピン作成時に再利用されます）")) {
         pinPositions.splice(selectedPinIndex, 1);
         stagePins();
         alert("ピンを削除しました。");
@@ -368,17 +378,27 @@ function deletePin() {
     closeEditPopup();
 }
 
+// 💡 修正：大容量データに対応した高密度QRコード生成処理
 function generateAdminQR() {
     if (pinPositions.length === 0) { alert("ピンがありません"); return; }
-    document.getElementById('qrcode-canvas').innerHTML = ""; 
-    const qrData = "SET:" + JSON.stringify(pinPositions);
     
-    new QRCode(document.getElementById("qrcode-canvas"), {
-        text: qrData,
-        width: 256,
-        height: 256
-    });
-    document.getElementById('qrcode-popup').style.display = 'block';
+    try {
+        const qrCanvas = document.getElementById('qrcode-canvas');
+        qrCanvas.innerHTML = ""; 
+        const qrData = "SET:" + JSON.stringify(pinPositions);
+        
+        // qrcode-generatorライブラリを使って、データ量に合わせて自動で最適化（Type 0, エラー訂正L）
+        const qr = qrcode(0, 'L');
+        qr.addData(qrData);
+        qr.make();
+        
+        // 画面に画像として出力（セルサイズは自動調整）
+        qrCanvas.innerHTML = qr.createImgTag(6);
+        document.getElementById('qrcode-popup').style.display = 'block';
+    } catch (e) {
+        alert("QRコードの生成に失敗しました。データが大きすぎる可能性があります。ピンの数を減らすか、教室名を短くしてください。");
+        console.error(e);
+    }
 }
 
 function closeQRPopup() {
