@@ -1,187 +1,95 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>QR校内探検マップ</title>
-    <link rel="stylesheet" href="style.css">
-    <style>
-        /* ポップアップ画面のスタイル */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
-            background-color: rgba(0,0,0,0.8);
-            z-index: 200;
-            justify-content: center;
-            align-items: center;
-            flex-direction: column;
-            color: white;
-        }
-        .modal img {
-            max-width: 80%;
-            max-height: 70%;
-            border: 5px solid white;
-            border-radius: 10px;
-        }
-        .modal h2 { margin-top: 15px; font-size: 24px; }
-        .close-btn {
-            margin-top: 15px; padding: 10px 20px;
-            background-color: #ff6666; color: white;
-            border: none; border-radius: 50px; font-size: 18px; cursor: pointer;
-        }
-    </style>
-</head>
-<body class="children-mode">
-
-    <main id="map-area">
-        <img src="https://drive.google.com/uc?export=view&id=1StstbVYlIjVJ0V95H-9yD4Gb6fQf_woW" alt="校内マップ" id="map-image">
-        <div id="stamps-container"></div>
-    </main>
-
-    <button id="camera-button">カ<br>メ<br>ラ</button>
-
-    <div id="admin-panel">
-        <h3>【先生用】設定モード</h3>
-        <p>①マップをタップしてピンを配置 ➡️ ②下のボタンでコードをコピー</p>
-        <button id="save-settings-btn" onclick="exportConfig()">⚙️ 設定コードをコピー（GitHub貼り付け用）</button>
-    </div>
-
-    <div id="room-modal" class="modal" onclick="closeModal()">
-        <img id="modal-image" src="" alt="教室の様子">
-        <h2 id="modal-title">教室名</h2>
-        <button class="close-btn">とじる</button>
-    </div>
-
-    <script>
-        // ==========================================
-        // 🛠️ 先生のデータ設定エリア
-        // ==========================================
-        
-        // 【1】位置データ（仮の位置。先生モードでポチポチした後にここを書き換えます）
-        const pinPositions = [
-            { "id": "1001", "x": 30, "y": 40 },
-            { "id": "1002", "x": 70, "y": 20 }
-        ];
-
-        // 【2】教室の名前と、いただいた理科室のURLを配置しました
-        const roomDetails = {
-            "1001": {
-                name: "こうちょうしつ",
-                image: "https://drive.google.com/uc?export=view&id=1ToGn_ByXQuz7ybHGlfwOQU9meEtk6iin" // テスト用に同じ画像を入れています
-            },
-            "1002": {
-                name: "りかしつ",
-                image: "https://drive.google.com/uc?export=view&id=1ToGn_ByXQuz7ybHGlfwOQU9meEtk6iin"
-            }
-        };
-
-        // ==========================================
-        // ⚙️ システムのプログラム
-        // ==========================================
-        
-        // モード判定
-        const urlParams = new URLSearchParams(window.location.search);
-        const mode = urlParams.get('mode');
-        const isAdmin = (mode === 'admin');
-
-        if (isAdmin) {
-            document.body.classList.remove('children-mode');
-            document.body.classList.add('admin-mode');
-        }
-
-        // テスト用：1002（理科室）をすでにゲットした状態にしています
-        let myStamps = ["1002"]; 
-
-        // 画面にピンを配置する関数
-        function stagePins() {
-            if (isAdmin) return; 
-
-            const container = document.getElementById('stamps-container');
-            container.innerHTML = ""; 
-
-            pinPositions.forEach(pin => {
-                const stamp = document.createElement('div');
-                stamp.className = 'stamp';
-                stamp.style.left = pin.x + '%';
-                stamp.style.top = pin.y + '%';
-
-                if (myStamps.includes(pin.id)) {
-                    stamp.classList.add('achieved');
-                    stamp.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        showRoomDetails(pin.id);
-                    });
-                } else {
-                    stamp.addEventListener('click', (e) => {
-                        e.stopPropagation();
-                        alert("ここは まだ見つけていないよ！QRコードを探そう！");
-                    });
-                }
-
-                container.appendChild(stamp);
-            });
-        }
-
-        // 教室の詳細を表示する関数
-        function showRoomDetails(qrId) {
-            const room = roomDetails[qrId];
-            if (!room) return;
-
-            document.getElementById('modal-image').src = room.image;
-            document.getElementById('modal-title').innerText = room.name;
-            document.getElementById('room-modal').style.display = 'flex';
-        }
-
-        // ポップアップを閉じる関数
-        function closeModal() {
-            document.getElementById('room-modal').style.display = 'none';
-        }
-
-        // 最初の画面表示
-        stagePins();
-
-        // --- 先生モード用のピン登録・書き出し処理 ---
-        let temporaryPins = [...pinPositions]; 
-        if (isAdmin) {
-            temporaryPins.forEach(p => createTempPin(p.x, p.y, p.id));
-        }
-
-        document.getElementById('map-area').addEventListener('click', function(e) {
-            if (!isAdmin) return;
-            const rect = document.getElementById('map-image').getBoundingClientRect();
-            const percentX = ((e.clientX - rect.left) / rect.width) * 100;
-            const percentY = ((e.clientY - rect.top) / rect.height) * 100;
-            if (percentX < 0 || percentX > 100 || percentY < 0 || percentY > 100) return;
-
-            const qrId = prompt("この場所のQRコード番号を入力してください");
-            if (qrId) {
-                createTempPin(percentX, percentY, qrId);
-                temporaryPins.push({
-                    id: qrId,
-                    x: Math.round(percentX * 100) / 100,
-                    y: Math.round(percentY * 100) / 100
-                });
-            }
-        });
-
-        function createTempPin(x, y, label) {
-            const container = document.getElementById('stamps-container');
-            const pin = document.createElement('div');
-            pin.className = 'stamp achieved';
-            pin.style.left = x + '%'; pin.style.top = y + '%';
-            pin.innerText = label; pin.style.fontSize = '10px'; pin.style.color = 'black';
-            pin.style.textAlign = 'center'; pin.style.lineHeight = '30px';
-            container.appendChild(pin);
-        }
-
-        function exportConfig() {
-            if (temporaryPins.length === 0) { alert("ピンがありません"); return; }
-            const jsonString = JSON.stringify(temporaryPins, null, 2);
-            navigator.clipboard.writeText(jsonString).then(() => {
-                alert("【完了】設定コードをコピーしました！\n\nコード内の「const pinPositions = ...」の部分に貼り付けてください。");
-            });
-        }
-    </script>
-</body>
-</html>
+<script>
+const urlParams=new URLSearchParams(window.location.search);
+const mode=urlParams.get('mode');
+const isAdmin=(mode==='admin');
+if(isAdmin){
+document.body.classList.remove('children-mode');
+document.body.classList.add('admin-mode');
+}
+const pinPositions=[
+{"id":"1001","x":30,"y":40},
+{"id":"1002","x":70,"y":20}
+];
+const roomDetails={
+"1001":{
+name:"こうちょうしつ",
+image:"https://drive.google.com/uc?export=view&id=1ToGn_ByXQuz7ybHGlfwOQU9meEtk6iin"
+},
+"1002":{
+name:"りかしつ",
+image:"https://drive.google.com/uc?export=view&id=1ToGn_ByXQuz7ybHGlfwOQU9meEtk6iin"
+}
+};
+let myStamps=["1002"];
+function stagePins(){
+if(isAdmin)return;
+const container=document.getElementById('stamps-container');
+container.innerHTML="";
+pinPositions.forEach(pin=>{
+const stamp=document.createElement('div');
+stamp.className='stamp';
+stamp.style.left=pin.x+'%';
+stamp.style.top=pin.y+'%';
+if(myStamps.includes(pin.id)){
+stamp.classList.add('achieved');
+stamp.addEventListener('click',(e)=>{
+e.stopPropagation();
+showRoomDetails(pin.id);
+});
+}else{
+stamp.addEventListener('click',(e)=>{
+e.stopPropagation();
+alert("ここは まだ見つけていないよ！QRコードを探そう！");
+});
+}
+container.appendChild(stamp);
+});
+}
+function showRoomDetails(qrId){
+const room=roomDetails[qrId];
+if(!room)return;
+document.getElementById('modal-image').src=room.image;
+document.getElementById('modal-title').innerText=room.name;
+document.getElementById('room-modal').style.display='flex';
+}
+function closeModal(){
+document.getElementById('room-modal').style.display='none';
+}
+stagePins();
+let temporaryPins=[...pinPositions];
+if(isAdmin){
+temporaryPins.forEach(p=>createTempPin(p.x,p.y,p.id));
+}
+document.getElementById('map-area').addEventListener('click',function(e){
+if(!isAdmin)return;
+const rect=document.getElementById('map-image').getBoundingClientRect();
+const percentX=((e.clientX-rect.left)/rect.width)*100;
+const percentY=((e.clientY-rect.top)/rect.height)*100;
+if(percentX<0||percentX>100||percentY<0||percentY>100)return;
+const qrId=prompt("この場所のQRコード番号を入力してください");
+if(qrId){
+createTempPin(percentX,percentY,qrId);
+temporaryPins.push({
+id:qrId,
+x:Math.round(percentX * 100)/100,
+y:Math.round(percentY * 100)/100
+});
+}
+});
+function createTempPin(x,y,label){
+const container=document.getElementById('stamps-container');
+const pin=document.createElement('div');
+pin.className='stamp achieved';
+pin.style.left=x+'%';pin.style.top=y+'%';
+pin.innerText=label;pin.style.fontSize='10px';pin.style.color='black';
+pin.style.textAlign='center';pin.style.lineHeight='30px';
+container.appendChild(pin);
+}
+function exportConfig(){
+if(temporaryPins.length===0){alert("ピンがありません");return;}
+const jsonString=JSON.stringify(temporaryPins,null,2);
+navigator.clipboard.writeText(jsonString).then(()=>{
+alert("【完了】設定コードをコピーしました！\n\nコード内の「const pinPositions = ...」の部分に貼り付けてください。");
+});
+}
+</script>
