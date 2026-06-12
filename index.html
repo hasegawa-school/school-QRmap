@@ -115,16 +115,16 @@ html, body {
 </div>
 
 <div id="admin-edit-popup" class="admin-edit-popup">
-    <h3 id="edit-popup-title">ピンの編集</h3>
-    <p id="edit-popup-info" style="font-weight:bold; color:#2c3e50;"></p>
-    <button onclick="editRoomName()" style="background:#3498db; color:white;">教室名を変える</button><br>
+    <h3 id="edit-popup-title">ピンの確認</h3>
+    <p id="edit-popup-info" style="font-weight:bold; color:#2c3e50; font-size:18px;"></p>
+    <p style="font-size:12px; color:#7f8c8d;">この教室の写真は「（上の番号）.jpg」という名前でGitHubに保存してください。</p>
     <button onclick="deletePin()" style="background:#e74c3c; color:white;">このピンを削除する</button><br>
     <button onclick="closeEditPopup()" style="background:#7f8c8d; color:white;">とじる</button>
 </div>
 
 <div id="room-modal" class="modal" onclick="closeModal()">
 <img id="modal-image" src="" alt="教室の様子">
-<h2 id="modal-title">教室名</h2>
+<h2 id="modal-title">みつけたよ！</h2>
 <button class="close-btn">とじる</button>
 </div>
 
@@ -144,14 +144,6 @@ if (localStorage.getItem(STORAGE_KEY_STAMPS)) {
     myStamps = JSON.parse(localStorage.getItem(STORAGE_KEY_STAMPS));
 }
 
-// 💡 日本語の文字化けを完全に防ぐための暗号化・復号化関数（UTF-8対応Base64）
-function convToSafeStr(str) {
-    return btoa(unescape(encodeURIComponent(str)));
-}
-function convFromSafeStr(base64) {
-    return decodeURIComponent(escape(atob(base64)));
-}
-
 function stagePins() {
     const container = document.getElementById('stamps-container');
     container.innerHTML = "";
@@ -163,6 +155,7 @@ function stagePins() {
         stamp.style.top = pin.y + '%';
         
         if (isAdmin) {
+            // 【先生モード】常にゴールド、中に管理用の「101」などを表示
             stamp.classList.add('achieved');
             stamp.innerText = pin.id;
             stamp.style.fontSize = '11px';
@@ -175,6 +168,7 @@ function stagePins() {
                 openEditPopup(index);
             });
         } else if (myStamps.includes(String(pin.id))) {
+            // 【子どもモード：発見済み】ゴールドになり、タップで写真のみ表示（数字は非表示）
             stamp.classList.add('achieved');
             stamp.innerText = "";
             stamp.addEventListener('click', (e) => {
@@ -182,6 +176,7 @@ function stagePins() {
                 showRoomDetails(pin);
             });
         } else {
+            // 【子どもモード：未発見】灰色
             stamp.innerText = "";
             stamp.style.backgroundColor = "#bdc3c7";
             stamp.style.border = "2px solid #7f8c8d";
@@ -194,26 +189,25 @@ function stagePins() {
     });
 }
 
-// 💡 修正：確実性を上げるため「番号.jpg」で画像を表示。大文字JPGエラーにも自動対応
+// 💡 子ども用：番号.jpg の写真を確実に読み込む（iPhoneの大文字JPGにも自動対応）
 function showRoomDetails(pin) {
     const imgEl = document.getElementById('modal-image');
     
-    // まずは 小文字の「番号.jpg」を試す
+    // まずは通常の「101.jpg」などで読み込み
     imgEl.src = `${pin.id}.jpg`;
     
-    // もし画像が読み込めなかったら、iPhoneに多い大文字の「番号.JPG」を自動で試す安全機能
+    // エラーが起きたら大文字の「101.JPG」を自動で試す安全網
     imgEl.onerror = function() {
         if (this.src.endsWith('.jpg')) {
             this.src = `${pin.id}.JPG`;
         } else if (this.src.endsWith('.JPG')) {
-            this.src = `${pin.id}.png`; // さらにダメならpng
+            this.src = `${pin.id}.png`;
         } else {
-            this.src = 'map.png'; // 最終手段
+            this.src = 'map.png'; // 最終的に写真がなければマップを出す
             this.onerror = null;
         }
     };
 
-    document.getElementById('modal-title').innerText = pin.name;
     document.getElementById('room-modal').style.display = 'flex';
 }
 
@@ -289,29 +283,12 @@ function tick() {
 }
 
 function handleScanResult(qrValue) {
-    // 💡 暗号化されたマスターQRコード（S:）の判定と復号
-    if (qrValue.startsWith("S:")) {
-        playBeep();
-        try {
-            const encryptedData = qrValue.replace("S:", "");
-            const decryptedJson = convFromSafeStr(encryptedData);
-            pinPositions = JSON.parse(decryptedJson);
-            localStorage.setItem(STORAGE_KEY_PINS, JSON.stringify(pinPositions)); 
-            alert("⚙️ 日本語マップのセットアップが完了しました！探検をはじめよう！");
-            stopCamera();
-            stagePins();
-        } catch(e) {
-            alert("マスターQRの読み込みに失敗しました。新しいコードで再生成してください。");
-        }
-        return;
-    }
-    
-    // 昔のマスターQRの互換性維持
     if (qrValue.startsWith("SET:")) {
         playBeep();
-        pinPositions = JSON.parse(qrValue.replace("SET:", ""));
+        const dataStr = qrValue.replace("SET:", "");
+        pinPositions = JSON.parse(dataStr);
         localStorage.setItem(STORAGE_KEY_PINS, JSON.stringify(pinPositions)); 
-        alert("⚙️ マップのセットアップが完了しました！");
+        alert("⚙️ マップのセットアップが完了しました！探検をはじめよう！");
         stopCamera();
         stagePins();
         return;
@@ -323,7 +300,7 @@ function handleScanResult(qrValue) {
             playBeep();
             myStamps.push(String(qrValue));
             localStorage.setItem(STORAGE_KEY_STAMPS, JSON.stringify(myStamps));
-            alert(`🎉おめでとう！ [${hitPin.name}] をみつけたよ！`);
+            alert(`🎉新しいスタンプをみつけたよ！`);
         } else {
             alert(`もう持っているスタンプだよ！`);
         }
@@ -337,7 +314,7 @@ function toggleAdminMode() {
     if (isAdmin) {
         document.body.classList.remove('children-mode');
         document.body.classList.add('admin-mode');
-        alert("先生モード：タップしてピン追加、ピンをタップして編集・削除。");
+        alert("先生モード：タップすると自動でピンを追加します。ピンをタップすると削除できます。");
     } else {
         document.body.classList.remove('admin-mode');
         document.body.classList.add('children-mode');
@@ -346,6 +323,7 @@ function toggleAdminMode() {
     stagePins();
 }
 
+// 💡 修正：タップしたら即時で空き番号（101〜）を割り振ってピンを打つ（文字入力はなし）
 document.getElementById('map-area').addEventListener('click', function(e) {
     if (!isAdmin) return;
     const mapImg = document.getElementById('map-image');
@@ -359,48 +337,32 @@ document.getElementById('map-area').addEventListener('click', function(e) {
     
     if (percentX < 0 || percentX > 100 || percentY < 0 || percentY > 100) return;
     
-    const roomName = prompt("教室名を入力してください（例: りかしつ）");
-    if (roomName) {
-        let targetId = 101;
-        const currentIds = pinPositions.map(p => parseInt(p.id));
-        while (currentIds.includes(targetId)) {
-            targetId++;
-        }
-        
-        pinPositions.push({ 
-            id: String(targetId), 
-            name: roomName,
-            x: Math.round(percentX * 100) / 100, 
-            y: Math.round(percentY * 100) / 100 
-        });
-        pinPositions.sort((a, b) => parseInt(a.id) - parseInt(b.id));
-        stagePins();
+    let targetId = 101;
+    const currentIds = pinPositions.map(p => parseInt(p.id));
+    while (currentIds.includes(targetId)) {
+        targetId++;
     }
+    
+    pinPositions.push({ 
+        id: String(targetId), 
+        x: Math.round(percentX * 100) / 100, 
+        y: Math.round(percentY * 100) / 100 
+    });
+    pinPositions.sort((a, b) => parseInt(a.id) - parseInt(b.id));
+    stagePins();
 });
 
 function openEditPopup(index) {
     selectedPinIndex = index;
     const pin = pinPositions[index];
-    document.getElementById('edit-popup-title').innerText = `QR番号: ${pin.id}`;
-    document.getElementById('edit-popup-info').innerText = `教室名: ${pin.name}`;
+    document.getElementById('edit-popup-title').innerText = `ピンの確認`;
+    document.getElementById('edit-popup-info').innerText = `QR番号: ${pin.id}`;
     document.getElementById('admin-edit-popup').style.display = 'block';
 }
 
 function closeEditPopup() {
     document.getElementById('admin-edit-popup').style.display = 'none';
     selectedPinIndex = null;
-}
-
-function editRoomName() {
-    if (selectedPinIndex === null) return;
-    const currentPin = pinPositions[selectedPinIndex];
-    const newName = prompt("新しい教室名を入力してください", currentPin.name);
-    if (newName) {
-        currentPin.name = newName;
-        stagePins();
-        alert("教室名を変更しました。");
-    }
-    closeEditPopup();
 }
 
 function deletePin() {
@@ -413,26 +375,22 @@ function deletePin() {
     closeEditPopup();
 }
 
-// 💡 修正：日本語データを英数字の安全な文字列に暗号化してからQRを生成する
 function generateAdminQR() {
     if (pinPositions.length === 0) { alert("ピンがありません"); return; }
     
     try {
         const qrCanvas = document.getElementById('qrcode-canvas');
         qrCanvas.innerHTML = ""; 
-        
-        // データを圧縮・英数字暗号化
-        const jsonStr = JSON.stringify(pinPositions);
-        const safeData = "S:" + convToSafeStr(jsonStr);
+        const qrData = "SET:" + JSON.stringify(pinPositions);
         
         const qr = qrcode(0, 'L');
-        qr.addData(safeData);
+        qr.addData(qrData);
         qr.make();
         
         qrCanvas.innerHTML = qr.createImgTag(5);
         document.getElementById('qrcode-popup').style.display = 'block';
     } catch (e) {
-        alert("QRコードの生成に失敗しました。教室名を少し短くしてください。");
+        alert("QRコードの生成に失敗しました。");
         console.error(e);
     }
 }
