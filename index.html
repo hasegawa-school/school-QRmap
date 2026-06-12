@@ -16,7 +16,6 @@
 #camera-container{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:300;flex-direction:column;justify-content:center;align-items:center;}
 #webcam-video{width:100%;height:80%;object-fit:cover;}
 #camera-close-btn{position:fixed;bottom:30px;padding:15px 30px;background:#ff6666;color:white;border:none;border-radius:50px;font-size:20px;font-weight:bold;cursor:pointer;}
-/* 先生用マスターQRコード表示ポップアップ */
 #qrcode-popup{display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:white;padding:20px;border-radius:10px;box-shadow:0 0 20px rgba(0,0,0,0.5);z-index:400;text-align:center;color:black;}
 #qrcode-canvas{margin:15px auto;display:flex;justify-content:center;}
 </style>
@@ -24,7 +23,7 @@
 <body class="children-mode">
 
 <main id="map-area">
-<img id="map-image" src="" alt="校内マップ">
+<img id="map-image" src="map.png" alt="校内マップ" onerror="this.style.display='none'; alert('map.png が見つかりません。GitHubにmap.pngという名前で画像をアップロードしてください。');">
 <div id="stamps-container"></div>
 </main>
 
@@ -56,13 +55,6 @@
 </div>
 
 <script>
-// ==========================================
-// ⚙️ マップ画像のIDを設定（反映済み）
-// ==========================================
-const MAP_IMAGE_ID = '1StstbVYlIjVJ0V95H-9yD4Gb6fQf_woW';
-const MAP_URL = `https://drive.google.com/uc?export=view&id=${MAP_IMAGE_ID}`;
-document.getElementById('map-image').src = MAP_URL;
-
 let isAdmin = false;
 let pinPositions = [];
 let myStamps = [];
@@ -70,7 +62,6 @@ let myStamps = [];
 const STORAGE_KEY_PINS = 'school_qr_pins';
 const STORAGE_KEY_STAMPS = 'school_qr_stamps';
 
-// 児童の端末からブラウザ保存データを読み込む
 if (localStorage.getItem(STORAGE_KEY_PINS)) {
     pinPositions = JSON.parse(localStorage.getItem(STORAGE_KEY_PINS));
 }
@@ -107,7 +98,8 @@ function stagePins() {
 }
 
 function showRoomDetails(qrId) {
-    document.getElementById('modal-image').src = `https://drive.google.com/uc?export=view&id=1ToGn_ByXQuz7ybHGlfwOQU9meEtk6iin`; 
+    // 教室の写真もGitHub内の「1001.jpg」などを直接見に行くようにしてCORSを完全回避
+    document.getElementById('modal-image').src = `${qrId}.jpg`; 
     document.getElementById('modal-title').innerText = `${qrId} の へや`;
     document.getElementById('room-modal').style.display = 'flex';
 }
@@ -149,37 +141,41 @@ function scanQRCode() {
         canvas.height = video.videoHeight;
         const ctx = canvas.getContext('2d');
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
         
-        if (code) {
-            const qrValue = code.data;
+        try {
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
             
-            // 【先生用マスターQRを読み取った場合の処理】
-            if (qrValue.startsWith("SET:")) {
-                const dataStr = qrValue.replace("SET:", "");
-                pinPositions = JSON.parse(dataStr);
-                localStorage.setItem(STORAGE_KEY_PINS, JSON.stringify(pinPositions)); 
-                alert("⚙️ マップのセットアップが完了しました！探検をはじめよう！");
-                stopCamera();
-                stagePins();
-                return;
-            }
-            
-            // 通常の子ども用スタンプQRの場合
-            const hitPin = pinPositions.find(p => p.id === qrValue);
-            if (hitPin) {
-                if (!myStamps.includes(qrValue)) {
-                    myStamps.push(qrValue);
-                    localStorage.setItem(STORAGE_KEY_STAMPS, JSON.stringify(myStamps));
-                    alert(`🎉おめでとう！ [${qrValue}] をみつけたよ！`);
-                } else {
-                    alert(`もう持っているスタンプだよ！`);
+            if (code) {
+                const qrValue = code.data;
+                
+                if (qrValue.startsWith("SET:")) {
+                    const dataStr = qrValue.replace("SET:", "");
+                    pinPositions = JSON.parse(dataStr);
+                    localStorage.setItem(STORAGE_KEY_PINS, JSON.stringify(pinPositions)); 
+                    alert("⚙️ マップのセットアップが完了しました！探検をはじめよう！");
+                    stopCamera();
+                    stagePins();
+                    return;
                 }
-                stopCamera();
-                stagePins();
-                return;
+                
+                const hitPin = pinPositions.find(p => p.id === qrValue);
+                if (hitPin) {
+                    if (!myStamps.includes(qrValue)) {
+                        myStamps.push(qrValue);
+                        localStorage.setItem(STORAGE_KEY_STAMPS, JSON.stringify(myStamps));
+                        alert(`🎉おめでとう！ [${qrValue}] をみつけたよ！`);
+                    } else {
+                        alert(`もう持っているスタンプだよ！`);
+                    }
+                    stopCamera();
+                    stagePins();
+                    return;
+                }
             }
+        } catch (e) {
+            // エラーが起きてもフリーズせずに処理を続けるための安全弁
+            console.error(e);
         }
     }
     animationFrameId = requestAnimationFrame(scanQRCode);
@@ -222,7 +218,6 @@ function createTempPin(x, y, label) {
     container.appendChild(pin);
 }
 
-// 先生の打ったピンデータからQRコードを生成する
 function generateAdminQR() {
     if (pinPositions.length === 0) { alert("ピンがありません"); return; }
     document.getElementById('qrcode-canvas').innerHTML = ""; 
@@ -240,7 +235,6 @@ function closeQRPopup() {
     document.getElementById('qrcode-popup').style.display = 'none';
 }
 
-// 初回表示
 stagePins();
 </script>
 </body>
